@@ -7,6 +7,7 @@ use axum::{
     Router,
 };
 use color_eyre::Result;
+use parking_lot::RwLock;
 use std::{
     env,
     net::SocketAddr,
@@ -18,11 +19,14 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod dir;
 
+use dir::CacheEntry;
+
 #[derive(Clone)]
 struct AppState {
     admin_username: Arc<str>,
     admin_password: Arc<str>,
     data_dir: Arc<Path>,
+    cache: Arc<RwLock<Vec<CacheEntry>>>,
 }
 
 impl AppState {
@@ -32,11 +36,13 @@ impl AppState {
         let admin_password = env::var("SFSB_ADMIN_PASSWORD").unwrap().into();
         let data_dir = env::var("SFSB_DATA_DIR").unwrap_or("./data".into());
         let data_dir = PathBuf::from(&data_dir).into();
+        let cache = Arc::new(RwLock::new(vec![]));
 
         AppState {
             admin_username,
             admin_password,
             data_dir,
+            cache,
         }
     }
 }
@@ -52,12 +58,41 @@ async fn main() -> Result<()> {
         .init();
     color_eyre::install()?;
 
+    let state = AppState::new();
+    let data_dir = Arc::clone(&state.data_dir);
+    let cache = Arc::clone(&state.cache);
+
+    tokio::spawn(async move {
+        loop {
+            let entries = match data_dir.read_dir() {
+                Ok(entries) => entries,
+                Err(e) => {
+                    info!("Failed to read contents of data dir {data_dir:?}: {e}");
+                    continue;
+                }
+            };
+            let entries: Result<Vec<CacheEntry>> = entries.map(|e| e?.try_into()).collect();
+            let entries = match entries {
+                Ok(entries) => entries,
+                Err(e) => {
+                    info!("Failed to parse contents of data dir {data_dir:?}: {e}");
+                    continue;
+                }
+            };
+            let mut lock = cache.write();
+            lock.clear();
+            lock.extend(entries);
+            drop(lock);
+            break;
+        }
+    });
+
     let app = Router::new()
         .route("/", get(|| async { Redirect::permanent("/browse/") }))
         .route("/browse", get(fetch_root))
         .route("/browse/", get(fetch_root))
         .route("/browse/*path", get(serve_path))
-        .with_state(AppState::new());
+        .with_state(state);
     let addr: SocketAddr = "0.0.0.0:3779".parse().unwrap();
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -66,14 +101,15 @@ async fn main() -> Result<()> {
 }
 
 async fn fetch_root(State(state): State<AppState>) -> impl IntoResponse {
-    fetch_path(&state.data_dir, Path::new(".")).await
+    fetch_path(Path::new("."), Arc::clone(&state.cache)).await
 }
 
 async fn fetch_path(
-    data_dir: &Path,
     fetch_dir: &Path,
+    cache: Arc<RwLock<Vec<CacheEntry>>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    dir::DirectoryViewTemplate::new(data_dir, fetch_dir)
+    info!("Fetching [{path}]", path = fetch_dir.to_string_lossy());
+    dir::DirectoryViewTemplate::new(fetch_dir, cache)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
@@ -82,10 +118,5 @@ async fn serve_path(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     // FIXME: nicer errors?
-    info!("Fetching [{path}]", path = path.to_string_lossy());
-    if path.is_absolute() {
-        Err((StatusCode::FORBIDDEN, "Absolute paths no worky".into()))
-    } else {
-        fetch_path(&state.data_dir, &path).await
-    }
+    fetch_path(&path, Arc::clone(&state.cache)).await
 }

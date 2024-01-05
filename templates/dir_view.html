@@ -1,7 +1,8 @@
 <html>
 <body>
 <div>
-	<a href="/browse/{{parent}}">[..]</a><a href="/browse/">[Root]</a>/{{ dirname }}
+	{% if parent.is_some() %}<a href="/browse/{{parent.as_ref().unwrap()}}">[..]</a>{% endif %}
+	<a href="/browse/">[Root]</a>/{{ dirname }}
 </div>
 <div>
 	<table>
@@ -13,18 +14,20 @@
 		</tr>
 		{% for entry in entries %}
 		<tr>
-			{% if entry.is_dir %}
+			{% if entry.is_dir() %}
+				{% let entry = entry.as_dir() %}
 				<td><a href="{{entry.name}}/"><strong>{{ entry.name }}</strong></a></td>
 			{% else %}
-				<td>{{ entry.name }}</td>
+				<td>{{ entry.as_file().name }}</td>
 			{% endif %}
-			<td>{{ entry.size }}</td>
-			{% if entry.is_dir %}
-				<td>{{ entry.children_count.unwrap() }}</td>
+			<td>{{ entry.size_str() }}</td>
+			{% if entry.is_dir() %}
+				{% let entry = entry.as_dir() %}
+				<td>{{ entry.children_count() }}</td>
 			{% else %}
 				<td>-</td>
 			{% endif %}
-			<td>{{ entry.created }}</td>
+			<td>{{ entry.created() }}</td>
 		</tr>
 		{% endfor %}
 	</table>
