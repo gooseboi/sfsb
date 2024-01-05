@@ -1,0 +1,33 @@
+<html>
+<body>
+<div>
+	<a href="/browse/{{parent}}">[..]</a><a href="/browse/">[Root]</a>/{{ dirname }}
+</div>
+<div>
+	<table>
+		<tr>
+			<th>Name</th>
+			<th>Size</th>
+			<th>Children Count</th>
+			<th>Creation Time</th>
+		</tr>
+		{% for entry in entries %}
+		<tr>
+			{% if entry.is_dir %}
+				<td><a href="{{entry.name}}/"><strong>{{ entry.name }}</strong></a></td>
+			{% else %}
+				<td>{{ entry.name }}</td>
+			{% endif %}
+			<td>{{ entry.size }}</td>
+			{% if entry.is_dir %}
+				<td>{{ entry.children_count.unwrap() }}</td>
+			{% else %}
+				<td>-</td>
+			{% endif %}
+			<td>{{ entry.created }}</td>
+		</tr>
+		{% endfor %}
+	</table>
+</div>
+</body>
+</html>
