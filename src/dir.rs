@@ -205,6 +205,7 @@ impl TryFrom<std::fs::DirEntry> for CacheEntry {
 pub struct DirectoryViewTemplate {
     parent: Option<String>,
     dirname: String,
+    full_dirname: String,
     entries: Vec<CacheEntry>,
     sort_direction: SortDirection,
     sort_key: SortKey,
@@ -324,6 +325,8 @@ impl DirectoryViewTemplate {
         Ok(Self {
             parent,
             dirname,
+            // FIXME: Display the directory properly in the title
+            full_dirname,
             entries,
             sort_direction: query.sort_direction,
             sort_key: query.sort_key,
