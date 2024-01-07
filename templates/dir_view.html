@@ -1,4 +1,8 @@
 <html>
+	<head>
+		<meta charset="utf-8">
+		<title>sfsb - {{dirname}}</title>
+	</head>
 <body>
 <div>
 	{% if parent.is_some() %}<a href="/browse/{{parent.as_ref().unwrap()}}">[..]</a>{% endif %}
@@ -7,10 +11,42 @@
 <div>
 	<table>
 		<tr>
-			<th>Name</th>
-			<th>Size</th>
-			<th>Children Count</th>
-			<th>Creation Time</th>
+			{% if sort_key == SortKey::Name %}
+				{% if sort_direction == SortDirection::Ascending %}
+					<th><a href="/browse/{{dirname}}?sort=name&ord=desc">Name</a></th>
+				{% else %}
+					<th><a href="/browse/{{dirname}}?sort=name&ord=asc">Name</a></th>
+				{% endif %}
+			{% else %}
+				<th><a href="/browse/{{dirname}}?sort=name&ord=asc">Name</a></th>
+			{% endif %}
+			{% if sort_key == SortKey::Date %}
+				{% if sort_direction == SortDirection::Ascending %}
+					<th><a href="/browse/{{dirname}}?sort=date&ord=desc">Creation Time</a></th>
+				{% else %}
+					<th><a href="/browse/{{dirname}}?sort=date&ord=asc">Creation Time</a></th>
+				{% endif %}
+			{% else %}
+				<th><a href="/browse/{{dirname}}?sort=date&ord=asc">Creation Time</a></th>
+			{% endif %}
+			{% if sort_key == SortKey::Size %}
+				{% if sort_direction == SortDirection::Ascending %}
+					<th><a href="/browse/{{dirname}}?sort=size&ord=desc">Size</a></th>
+				{% else %}
+					<th><a href="/browse/{{dirname}}?sort=size&ord=asc">Size</a></th>
+				{% endif %}
+			{% else %}
+				<th><a href="/browse/{{dirname}}?sort=size&ord=asc">Size</a></th>
+			{% endif %}
+			{% if sort_key == SortKey::Size %}
+				{% if sort_direction == SortDirection::Ascending %}
+					<th><a href="/browse/{{dirname}}?sort=children_count&ord=desc">Children Count</a></th>
+				{% else %}
+					<th><a href="/browse/{{dirname}}?sort=children_count&ord=asc">Children Count</a></th>
+				{% endif %}
+			{% else %}
+				<th><a href="/browse/{{dirname}}?sort=children_count&ord=asc">Children Count</a></th>
+			{% endif %}
 		</tr>
 		{% for entry in entries %}
 		<tr>
@@ -20,6 +56,7 @@
 			{% else %}
 				<td>{{ entry.as_file().name }}</td>
 			{% endif %}
+			<td>{{ entry.created() }}</td>
 			<td>{{ entry.size_str() }}</td>
 			{% if entry.is_dir() %}
 				{% let entry = entry.as_dir() %}
@@ -27,7 +64,6 @@
 			{% else %}
 				<td>-</td>
 			{% endif %}
-			<td>{{ entry.created() }}</td>
 		</tr>
 		{% endfor %}
 	</table>

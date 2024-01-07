@@ -1,6 +1,6 @@
 use askama_axum::IntoResponse;
 use axum::{
-    extract::{self, State},
+    extract::{self, Query, State},
     http::StatusCode,
     response::Redirect,
     routing::get,
@@ -19,7 +19,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod dir;
 
-use dir::CacheEntry;
+use dir::{CacheEntry, FetchQuery};
 
 #[derive(Clone)]
 struct AppState {
@@ -100,23 +100,28 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn fetch_root(State(state): State<AppState>) -> impl IntoResponse {
-    fetch_path(Path::new("."), Arc::clone(&state.cache)).await
+async fn fetch_root(
+    State(state): State<AppState>,
+    Query(query): Query<FetchQuery>,
+) -> impl IntoResponse {
+    fetch_path(Path::new("."), Arc::clone(&state.cache), query).await
 }
 
 async fn fetch_path(
     fetch_dir: &Path,
     cache: Arc<RwLock<Vec<CacheEntry>>>,
+    query: FetchQuery,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     info!("Fetching [{path}]", path = fetch_dir.to_string_lossy());
-    dir::DirectoryViewTemplate::new(fetch_dir, cache)
+    dir::DirectoryViewTemplate::new(fetch_dir, cache, query)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 async fn serve_path(
     extract::Path(path): extract::Path<PathBuf>,
     State(state): State<AppState>,
+    Query(query): Query<FetchQuery>,
 ) -> impl IntoResponse {
     // FIXME: nicer errors?
-    fetch_path(&path, Arc::clone(&state.cache)).await
+    fetch_path(&path, Arc::clone(&state.cache), query).await
 }

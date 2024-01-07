@@ -5,13 +5,54 @@ use color_eyre::{
     Report, Result,
 };
 use parking_lot::RwLock;
+use serde::Deserialize;
 use std::{
-    path::{Path, PathBuf, Component},
+    path::{Component, Path, PathBuf},
     sync::Arc,
 };
-use tracing::info;
+use tracing::debug;
 
 use askama::Template;
+
+#[derive(Deserialize, Debug)]
+pub struct FetchQuery {
+    #[serde(rename = "ord")]
+    #[serde(default)]
+    sort_direction: SortDirection,
+    #[serde(rename = "sort")]
+    #[serde(default)]
+    sort_key: SortKey,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SortDirection {
+    #[serde(rename = "asc")]
+    Ascending,
+    #[serde(rename = "desc")]
+    Descending,
+}
+
+impl Default for SortDirection {
+    fn default() -> Self {
+        Self::Ascending
+    }
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SortKey {
+    Name,
+    Date,
+    Size,
+    ChildrenCount,
+}
+
+impl Default for SortKey {
+    fn default() -> Self {
+        Self::Name
+    }
+}
 
 #[derive(Clone)]
 pub enum CacheEntry {
@@ -37,6 +78,14 @@ impl CacheEntry {
         match self {
             File(f) => &f.created,
             Dir(d) => &d.created,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        use CacheEntry::*;
+        match self {
+            File(f) => &f.name,
+            Dir(d) => &d.name,
         }
     }
 
@@ -77,7 +126,7 @@ pub struct DirEntry {
 
 impl DirEntry {
     pub fn children_count(&self) -> usize {
-        self.children.iter().count()
+        self.children.len()
     }
 }
 
@@ -157,6 +206,8 @@ pub struct DirectoryViewTemplate {
     parent: Option<String>,
     dirname: String,
     entries: Vec<CacheEntry>,
+    sort_direction: SortDirection,
+    sort_key: SortKey,
 }
 
 /// Make the path be in the format we want
@@ -183,7 +234,7 @@ fn make_good(path: &Path) -> Result<PathBuf> {
 }
 
 fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Vec<CacheEntry>> {
-    info!("Getting path from cache: {path:?}");
+    debug!("Getting path from cache: {path:?}");
     if path == Path::new("") {
         return Ok(v.to_vec());
     }
@@ -201,12 +252,16 @@ fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Vec<CacheEntry>>
         return Ok(vec![]);
     };
 
-    info!("{}", c.as_dir().name);
+    debug!("Recursing into {}", c.as_dir().name);
     return get_path_from_cache(components.as_path(), &c.as_dir().children);
 }
 
 impl DirectoryViewTemplate {
-    pub fn new(data_dir: &Path, cache: Arc<RwLock<Vec<CacheEntry>>>) -> Result<Self> {
+    pub fn new(
+        data_dir: &Path,
+        cache: Arc<RwLock<Vec<CacheEntry>>>,
+        query: FetchQuery,
+    ) -> Result<Self> {
         let data_dir = make_good(data_dir)
             .wrap_err_with(|| format!("Failed making path {data_dir:?} goody"))?;
 
@@ -220,18 +275,58 @@ impl DirectoryViewTemplate {
                 .map(|p| p.to_owned())
         };
 
-        let dirname = match data_dir.as_os_str().to_string_lossy().as_ref() {
+        let full_dirname = data_dir.as_os_str().to_string_lossy().as_ref().to_owned();
+        let dirname = match full_dirname.as_str() {
             "." => String::new(),
             s => s.to_owned(),
         };
 
         let lock = cache.read();
-        let entries = get_path_from_cache(&data_dir, &lock).wrap_err_with(|| format!("Failed getting path for {dirname}"))?;
+        let mut entries = get_path_from_cache(&data_dir, &lock)
+            .wrap_err_with(|| format!("Failed getting path for {dirname}"))?;
         drop(lock);
+        entries.sort_by(|e1, e2| {
+            let ord = match query.sort_key {
+                SortKey::Name => e1.name().cmp(e2.name()),
+                SortKey::Date => match e1.created().cmp(e2.created()) {
+                    std::cmp::Ordering::Equal => e1.name().cmp(e2.name()),
+                    o => o,
+                },
+                SortKey::Size => match e1.size().cmp(&e2.size()) {
+                    std::cmp::Ordering::Equal => e1.name().cmp(e2.name()),
+                    o => o,
+                },
+                SortKey::ChildrenCount => {
+                    let o = if e1.is_dir() && e2.is_dir() {
+                        e1.as_dir()
+                            .children_count()
+                            .cmp(&e2.as_dir().children_count())
+                    } else if e1.is_dir() && !e2.is_dir() {
+                        std::cmp::Ordering::Greater
+                    } else if !e1.is_dir() && e2.is_dir() {
+                        std::cmp::Ordering::Less
+                    } else {
+                        std::cmp::Ordering::Equal
+                    };
+
+                    match o {
+                        std::cmp::Ordering::Equal => e1.name().cmp(e2.name()),
+                        o => o,
+                    }
+                }
+            };
+            if query.sort_direction == SortDirection::Descending {
+                ord.reverse()
+            } else {
+                ord
+            }
+        });
         Ok(Self {
             parent,
             dirname,
             entries,
+            sort_direction: query.sort_direction,
+            sort_key: query.sort_key,
         })
     }
 }
