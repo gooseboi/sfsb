@@ -277,9 +277,10 @@ impl DirectoryViewTemplate {
         };
 
         let full_dirname = data_dir.as_os_str().to_string_lossy().as_ref().to_owned();
+        // TODO: add anchors to each directory here
         let dirname = match full_dirname.as_str() {
             "." => String::new(),
-            s => s.to_owned(),
+            s => s.to_owned().split('/').intersperse(" / ").collect(),
         };
 
         let lock = cache.read();

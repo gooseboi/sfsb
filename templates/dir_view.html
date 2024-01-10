@@ -2,11 +2,51 @@
 	<head>
 		<meta charset="utf-8">
 		<title>sfsb - {{full_dirname}}</title>
+		<style>
+			body {
+				font-family: sans-serif;
+				font-size: 1.1em;
+			}
+
+			table {
+				border-collapse: collapse;
+				width: 100%;
+			}
+
+			td {
+				font-size: 100%;
+			}
+
+			td:nth-child(2) {
+				text-align: center;
+			}
+
+			td:nth-child(3) {
+				text-align: right;
+			}
+
+			td:nth-child(4) {
+				text-align: right;
+			}
+
+			tr:nth-child(2n+1) {
+				background-color: #00002010;
+			}
+
+			th {
+				padding-bottom: 4px;
+				border-bottom: 2px dashed #000;
+			}
+
+			a {
+				color: inherit;
+			}
+		</style>
 	</head>
 <body>
 <div>
 	{% if parent.is_some() %}<a href="/browse/{{parent.as_ref().unwrap()}}">[..]</a>{% endif %}
-	<a href="/browse/">[Root]</a>/{{ dirname }}
+	<a href="/browse/">[Root]</a> / {{ dirname }}
 </div>
 <div>
 	<table>

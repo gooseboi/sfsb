@@ -1,3 +1,5 @@
+#![feature(iter_intersperse)]
+
 use askama_axum::IntoResponse;
 use axum::{
     extract::{self, Query, State},
