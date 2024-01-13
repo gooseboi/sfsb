@@ -280,7 +280,7 @@ impl DirectoryViewTemplate {
         // TODO: add anchors to each directory here
         let dirname = match full_dirname.as_str() {
             "." => String::new(),
-            s => s.to_owned().split('/').intersperse(" / ").collect(),
+            s => s.split('/').intersperse(" / ").collect(),
         };
 
         let lock = cache.read();
