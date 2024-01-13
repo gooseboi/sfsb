@@ -1,6 +1,9 @@
 #![feature(exit_status_error)]
 
-use std::{path::{Path, PathBuf}, process::Command};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn main() {
     let templates_dir = "templates";
@@ -18,13 +21,19 @@ fn main() {
             p.push(template_file);
             p
         };
-        Command::new("minhtml").args(["--do-not-minify-doctype", "--keep-html-and-head-opening-tags", "--preserve-brace-template-syntax", "--minify-css"])
-                               .arg(template_path)
-                               .arg("--output")
-                               .arg(out_file)
-                               .status()
-                               .unwrap()
-                               .exit_ok()
-                               .unwrap();
+        Command::new("minhtml")
+            .args([
+                "--do-not-minify-doctype",
+                "--keep-html-and-head-opening-tags",
+                "--preserve-brace-template-syntax",
+                "--minify-css",
+            ])
+            .arg(template_path)
+            .arg("--output")
+            .arg(out_file)
+            .status()
+            .unwrap()
+            .exit_ok()
+            .unwrap();
     }
 }

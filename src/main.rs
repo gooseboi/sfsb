@@ -2,13 +2,14 @@
 
 use askama_axum::IntoResponse;
 use axum::{
+    body::Body,
     extract::{self, Query, State},
-    http::StatusCode,
+    http::{Response, StatusCode},
     response::Redirect,
     routing::get,
     Router,
 };
-use color_eyre::Result;
+use color_eyre::{eyre::WrapErr, Result};
 use parking_lot::RwLock;
 use std::{
     env,
@@ -94,6 +95,7 @@ async fn main() -> Result<()> {
         .route("/browse", get(fetch_root))
         .route("/browse/", get(fetch_root))
         .route("/browse/*path", get(serve_path))
+        .route("/dl/*path", get(dl_path))
         .with_state(state);
     let addr: SocketAddr = "0.0.0.0:3779".parse().unwrap();
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -113,10 +115,28 @@ async fn fetch_path(
     fetch_dir: &Path,
     cache: Arc<RwLock<Vec<CacheEntry>>>,
     query: FetchQuery,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    info!("Fetching [{path}]", path = fetch_dir.to_string_lossy());
-    dir::DirectoryViewTemplate::new(fetch_dir, cache, query)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+) -> Result<Response<Body>, (StatusCode, String)> {
+    info!(
+        "Displaying directory view for [{path}]",
+        path = fetch_dir.to_string_lossy()
+    );
+    let fetch_dir = dir::make_good(fetch_dir)
+        .wrap_err_with(|| format!("Failed making path {fetch_dir:?} goody"))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let lock = cache.read();
+    let entries = dir::get_path_from_cache(&fetch_dir, &lock)
+        .wrap_err_with(|| format!("Failed fetching contents of path {fetch_dir:?}"))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    drop(lock);
+    let Some(entries) = entries else {
+        return Ok(
+            Redirect::permanent(&format!("/dl/{p}", p = fetch_dir.to_string_lossy()))
+                .into_response(),
+        );
+    };
+    Ok(dir::DirectoryViewTemplate::new(&fetch_dir, entries, query)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .into_response())
 }
 
 async fn serve_path(
@@ -126,4 +146,11 @@ async fn serve_path(
 ) -> impl IntoResponse {
     // FIXME: nicer errors?
     fetch_path(&path, Arc::clone(&state.cache), query).await
+}
+
+async fn dl_path(
+    extract::Path(path): extract::Path<PathBuf>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    info!("Downloding [{p}]", p = path.to_string_lossy());
 }

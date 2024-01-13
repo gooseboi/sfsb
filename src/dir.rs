@@ -4,12 +4,8 @@ use color_eyre::{
     eyre::{bail, ContextCompat, WrapErr},
     Report, Result,
 };
-use parking_lot::RwLock;
 use serde::Deserialize;
-use std::{
-    path::{Component, Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Component, Path, PathBuf};
 use tracing::debug;
 
 use askama::Template;
@@ -212,7 +208,7 @@ pub struct DirectoryViewTemplate {
 }
 
 /// Make the path be in the format we want
-fn make_good(path: &Path) -> Result<PathBuf> {
+pub fn make_good(path: &Path) -> Result<PathBuf> {
     if path.is_absolute() {
         bail!("Path cannot be absolute, they no worky, got path {path:?}")
     }
@@ -234,15 +230,15 @@ fn make_good(path: &Path) -> Result<PathBuf> {
     Ok(path.to_path_buf())
 }
 
-fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Vec<CacheEntry>> {
+pub fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Option<Vec<CacheEntry>>> {
     debug!("Getting path from cache: {path:?}");
     if path == Path::new("") {
-        return Ok(v.to_vec());
+        return Ok(Some(v.to_vec()));
     }
 
     let mut components = path.components();
     let Some(component) = components.next() else {
-        return Ok(vec![]);
+        bail!("No component in path despite path not being empty");
     };
 
     let Component::Normal(s) = component else {
@@ -250,7 +246,7 @@ fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Vec<CacheEntry>>
     };
 
     let Some(c) = v.iter().find(|c| c.is_dir() && *c.as_dir().name == *s) else {
-        return Ok(vec![]);
+        return Ok(None);
     };
 
     debug!("Recursing into {}", c.as_dir().name);
@@ -258,14 +254,8 @@ fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Vec<CacheEntry>>
 }
 
 impl DirectoryViewTemplate {
-    pub fn new(
-        data_dir: &Path,
-        cache: Arc<RwLock<Vec<CacheEntry>>>,
-        query: FetchQuery,
-    ) -> Result<Self> {
-        let data_dir = make_good(data_dir)
-            .wrap_err_with(|| format!("Failed making path {data_dir:?} goody"))?;
-
+    pub fn new(data_dir: &Path, mut entries: Vec<CacheEntry>, query: FetchQuery) -> Result<Self> {
+        // FIXME: Encode file names
         let parent = if data_dir == Path::new(".") {
             None
         } else {
@@ -283,10 +273,6 @@ impl DirectoryViewTemplate {
             s => s.split('/').intersperse(" / ").collect(),
         };
 
-        let lock = cache.read();
-        let mut entries = get_path_from_cache(&data_dir, &lock)
-            .wrap_err_with(|| format!("Failed getting path for {dirname}"))?;
-        drop(lock);
         entries.sort_by(|e1, e2| {
             let ord = match query.sort_key {
                 SortKey::Name => e1.name().cmp(e2.name()),
