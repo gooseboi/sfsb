@@ -31,8 +31,9 @@ use dir::{CacheEntry, FetchQuery};
 
 #[derive(Clone)]
 struct AppState {
-    admin_username: Arc<str>,
-    admin_password: Arc<str>,
+    // TODO: Use these
+    _admin_username: Arc<str>,
+    _admin_password: Arc<str>,
     data_dir: Arc<Path>,
     cache: Arc<RwLock<Vec<CacheEntry>>>,
 }
@@ -47,8 +48,8 @@ impl AppState {
         let cache = Arc::new(RwLock::new(vec![]));
 
         AppState {
-            admin_username,
-            admin_password,
+            _admin_username: admin_username,
+            _admin_password: admin_password,
             data_dir,
             cache,
         }
