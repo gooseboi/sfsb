@@ -24,6 +24,7 @@ use std::{
 use tokio::io::AsyncSeekExt;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use url::Url;
 
 mod dir;
 
@@ -34,6 +35,7 @@ struct AppState {
     // TODO: Use these
     _admin_username: Arc<str>,
     _admin_password: Arc<str>,
+    base_url: Arc<Url>,
     data_dir: Arc<Path>,
     cache: Arc<RwLock<Vec<CacheEntry>>>,
 }
@@ -43,6 +45,8 @@ impl AppState {
         let admin_username = env::var("SFSB_ADMIN_USERNAME").unwrap().into();
         // FIXME: Hash this?
         let admin_password = env::var("SFSB_ADMIN_PASSWORD").unwrap().into();
+        let base_url = env::var("SFSB_BASE_URL").unwrap();
+        let base_url = Arc::new(Url::parse(&base_url).unwrap());
         let data_dir = env::var("SFSB_DATA_DIR").unwrap_or("./data".into());
         let data_dir = PathBuf::from(&data_dir).into();
         let cache = Arc::new(RwLock::new(vec![]));
@@ -50,10 +54,34 @@ impl AppState {
         AppState {
             _admin_username: admin_username,
             _admin_password: admin_password,
+            base_url,
             data_dir,
             cache,
         }
     }
+}
+
+fn generate_aria2(base_url: &Url, _fetch_dir: &Path, entries: &[CacheEntry]) -> String {
+    let mut list = String::new();
+    for entry in entries {
+        // TODO: Directories
+        if entry.is_file() {
+            let mut entry_url = base_url.clone();
+            entry_url.path_segments_mut().unwrap().push("dl").push(entry.name());
+            let mut entry_str = String::new();
+            entry_str.push_str(entry_url.as_str());
+            entry_str.push('\n');
+            entry_str.push('\t');
+            entry_str.push_str("dir=.");
+            entry_str.push('\n');
+            entry_str.push('\t');
+            entry_str.push_str(&format!("out={name}", name=entry.name()));
+            entry_str.push('\n');
+            entry_str.push('\n');
+            list.push_str(&entry_str);
+        }
+    }
+    list
 }
 
 #[tokio::main]
@@ -114,14 +142,15 @@ async fn fetch_root(
     State(state): State<AppState>,
     Query(query): Query<FetchQuery>,
 ) -> impl IntoResponse {
-    fetch_path(Path::new("."), Arc::clone(&state.cache), query).await
+    fetch_path(Path::new("."), state, query).await
 }
 
 async fn fetch_path(
     fetch_dir: &Path,
-    cache: Arc<RwLock<Vec<CacheEntry>>>,
+    state: AppState,
     query: FetchQuery,
 ) -> Result<Response<Body>, (StatusCode, String)> {
+    let cache = Arc::clone(&state.cache);
     info!(
         "Displaying directory view for [{path}]",
         path = fetch_dir.to_string_lossy()
@@ -140,9 +169,18 @@ async fn fetch_path(
                 .into_response(),
         );
     };
-    Ok(dir::DirectoryViewTemplate::new(&fetch_dir, entries, query)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .into_response())
+    if query.aria2() {
+        // FIXME: Should this go in /dl instead of /browse?
+        let base_url = &state.base_url;
+        Response::builder()
+            .header("Content-Type", "text/plain")
+            .body(Body::new(generate_aria2(base_url, &fetch_dir, &entries)))
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    } else {
+        dir::DirectoryViewTemplate::new(&fetch_dir, entries, query)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+            .map(|template| template.into_response())
+    }
 }
 
 async fn serve_path(
@@ -151,7 +189,7 @@ async fn serve_path(
     Query(query): Query<FetchQuery>,
 ) -> impl IntoResponse {
     // FIXME: nicer errors?
-    fetch_path(&path, Arc::clone(&state.cache), query).await
+    fetch_path(&path, state, query).await
 }
 
 fn content_type_from_extension(ext: Option<&str>) -> &str {

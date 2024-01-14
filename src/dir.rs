@@ -18,6 +18,13 @@ pub struct FetchQuery {
     #[serde(rename = "sort")]
     #[serde(default)]
     sort_key: SortKey,
+    aria2: Option<String>,
+}
+
+impl FetchQuery {
+    pub fn aria2(&self) -> bool {
+        self.aria2.is_some()
+    }
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq)]
@@ -90,6 +97,14 @@ impl CacheEntry {
         match self {
             File(_) => false,
             Dir(_) => true,
+        }
+    }
+
+    pub fn is_file(&self) -> bool {
+        use CacheEntry::*;
+        match self {
+            File(_) => true,
+            Dir(_) => false,
         }
     }
 
