@@ -1,3 +1,4 @@
+# syntax = docker/dockerfile:1.6
 FROM debian:bookworm-20231009-slim as rust_builder
 
 # Install curl and deps
@@ -18,22 +19,22 @@ RUN set -eux; \
 		/rustup-init -y --no-modify-path --profile minimal --no-update-default-toolchain; \
 		rm /rustup-init;
 
-WORKDIR /temp/rustup
-COPY rust-toolchain.toml ./
-# Add rustup to path, check that it works, and set profile to minimal
 ENV PATH=${PATH}:/root/.cargo/bin
 RUN set -eux; \
-		rustup --version; \
-		cargo; # This reads from rust-toolchain.toml
+		rustup --version
 
 # Copy sources and build them
 WORKDIR /app
-COPY src src
-COPY templates templates
-COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY . .
 
-RUN --mount=type=cache,target=/root/.cargo/registry \
+RUN cargo install minhtml
+
+RUN --mount=type=cache,target=/root/.rustup \
+    --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
+	--mount=type=cache,target=/app/target/build \
+	--mount=type=cache,target=/app/target/deps \
+	--mount=type=cache,target=/app/target/incremental \
 	set -eux; \
 	cargo build --release
 
