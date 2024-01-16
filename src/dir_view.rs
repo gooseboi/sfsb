@@ -138,7 +138,7 @@ impl DirectoryViewTemplate {
 
         let dirname = {
             let mut dirname = data_dir.as_os_str().to_string_lossy().as_ref().to_owned();
-            if !dirname.ends_with('/') {
+            if !dirname.is_empty() && !dirname.ends_with('/') {
                 dirname.push('/');
             }
             dirname
