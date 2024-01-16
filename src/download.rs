@@ -98,7 +98,8 @@ pub async fn dl_path(
         let file = tokio::fs::File::open(file_path)
             .await
             .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
-        let stream = tokio_util::io::ReaderStream::new(file);
+        let buffered_file = BufReader::new(file);
+        let stream = tokio_util::io::ReaderStream::new(buffered_file);
         let stream = axum::body::Body::from_stream(stream);
 
         Response::builder()
