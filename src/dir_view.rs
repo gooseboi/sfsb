@@ -1,14 +1,25 @@
-use byte_unit::Byte;
-use chrono::{DateTime, Utc};
+use askama_axum::IntoResponse;
+use axum::{
+    body::Body,
+    extract::{self, Query, State},
+    http::{Response, StatusCode},
+    response::Redirect,
+};
 use color_eyre::{
     eyre::{bail, ContextCompat, WrapErr},
-    Report, Result,
+    Result,
 };
 use serde::Deserialize;
-use std::path::{Component, Path, PathBuf};
-use tracing::debug;
+use std::{
+    path::{Component, Path, PathBuf},
+    sync::Arc,
+};
+use tracing::{debug, info};
+use url::Url;
 
 use askama::Template;
+
+use crate::{dir_cache::CacheEntry, AppState};
 
 #[derive(Deserialize, Debug)]
 pub struct FetchQuery {
@@ -57,160 +68,6 @@ impl Default for SortKey {
     }
 }
 
-#[derive(Clone)]
-pub enum CacheEntry {
-    File(FileEntry),
-    Dir(DirEntry),
-}
-
-impl CacheEntry {
-    pub fn size(&self) -> u64 {
-        use CacheEntry::*;
-        match self {
-            File(f) => f.size,
-            Dir(d) => d.children.iter().map(|e| e.size()).sum(),
-        }
-    }
-
-    pub fn size_str(&self) -> String {
-        format!("{byte:#}", byte = Byte::from_u64(self.size()))
-    }
-
-    pub fn created(&self) -> &str {
-        use CacheEntry::*;
-        match self {
-            File(f) => &f.created,
-            Dir(d) => &d.created,
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        use CacheEntry::*;
-        match self {
-            File(f) => &f.name,
-            Dir(d) => &d.name,
-        }
-    }
-
-    pub fn is_dir(&self) -> bool {
-        use CacheEntry::*;
-        match self {
-            File(_) => false,
-            Dir(_) => true,
-        }
-    }
-
-    pub fn is_file(&self) -> bool {
-        use CacheEntry::*;
-        match self {
-            File(_) => true,
-            Dir(_) => false,
-        }
-    }
-
-    pub fn as_dir(&self) -> &DirEntry {
-        let CacheEntry::Dir(entry) = self else {
-            unreachable!()
-        };
-        entry
-    }
-
-    pub fn as_file(&self) -> &FileEntry {
-        let CacheEntry::File(entry) = self else {
-            unreachable!()
-        };
-        entry
-    }
-}
-
-/// Struct that represents a file/directory inside a directory, that can
-/// access all its fields without erroring, because it errors upon construction
-#[derive(Clone)]
-pub struct DirEntry {
-    /// Name of the file
-    pub name: String,
-    /// UTC time this file was modified, in format `%Y-%m-%d [%H:%M:%S]`
-    pub created: String,
-    /// Children
-    pub children: Vec<CacheEntry>,
-}
-
-impl DirEntry {
-    pub fn children_count(&self) -> usize {
-        self.children.len()
-    }
-}
-
-/// Struct that represents a file/directory inside a directory, that can
-/// access all its fields without erroring, because it errors upon construction
-#[derive(Clone)]
-pub struct FileEntry {
-    /// Name of the file
-    pub name: String,
-    /// Localtime this file was modified, in format
-    pub created: String,
-    /// Size of this file, if this is a file, already formatted
-    /// Size of all children, if this is a directory
-    pub size: u64,
-}
-
-impl TryFrom<std::fs::DirEntry> for CacheEntry {
-    type Error = Report;
-
-    fn try_from(value: std::fs::DirEntry) -> Result<Self> {
-        let name = value
-            .file_name()
-            .to_str()
-            .with_context(|| format!("File name for {:?} was invalid unicode", value.file_name()))?
-            .to_owned();
-
-        let is_dir = value
-            .file_type()
-            .wrap_err_with(|| format!("Could not get filetype for {name}"))?
-            .is_dir();
-
-        let meta = value
-            .metadata()
-            .wrap_err_with(|| format!("Failed to get metadata for {name}"))?;
-
-        let created: DateTime<Utc> = meta
-            .created()
-            .wrap_err_with(|| format!("Failed to get creation time for {name}"))?
-            .into();
-        let created = created.format("%Y-%m-%d [%H:%M:%S]").to_string();
-
-        if is_dir {
-            let children: Vec<CacheEntry> = {
-                let entries = value
-                    .path()
-                    .read_dir()
-                    .wrap_err_with(|| format!("Failed to read children for directory {name}"))?;
-                let mut children = vec![];
-                for e in entries {
-                    let e = e?;
-                    children.push(
-                        e.try_into()
-                            .wrap_err_with(|| format!("Failed to get child for {name}"))?,
-                    );
-                }
-                children
-            };
-            Ok(CacheEntry::Dir(DirEntry {
-                name,
-                created,
-                children,
-            }))
-        } else {
-            let size = meta.len();
-            Ok(CacheEntry::File(FileEntry {
-                name,
-                created,
-                size,
-            }))
-        }
-    }
-}
-
 #[derive(Template)]
 #[template(path = "dir_view.html")]
 pub struct DirectoryViewTemplate {
@@ -246,7 +103,6 @@ pub fn make_good(path: &Path) -> Result<PathBuf> {
 }
 
 pub fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Option<Vec<CacheEntry>>> {
-    debug!("Getting path from cache: {path:?}");
     if path == Path::new("") {
         return Ok(Some(v.to_vec()));
     }
@@ -333,5 +189,96 @@ impl DirectoryViewTemplate {
             sort_direction: query.sort_direction,
             sort_key: query.sort_key,
         })
+    }
+}
+
+pub fn generate_aria2(base_url: &Url, _fetch_dir: &Path, entries: &[CacheEntry]) -> String {
+    let mut list = String::new();
+    for entry in entries {
+        // TODO: Directories
+        if entry.is_file() {
+            let mut entry_url = base_url.clone();
+            entry_url
+                .path_segments_mut()
+                .unwrap()
+                .push("dl")
+                .push(entry.name());
+            let mut entry_str = String::new();
+            entry_str.push_str(entry_url.as_str());
+            entry_str.push('\n');
+            entry_str.push('\t');
+            entry_str.push_str("dir=.");
+            entry_str.push('\n');
+            entry_str.push('\t');
+            entry_str.push_str(&format!("out={name}", name = entry.name()));
+            entry_str.push('\n');
+            entry_str.push('\n');
+            list.push_str(&entry_str);
+        }
+    }
+    list
+}
+
+pub async fn root_directory_view(
+    State(state): State<AppState>,
+    Query(query): Query<FetchQuery>,
+) -> impl IntoResponse {
+    view_for_path(Path::new("."), state, query).await
+}
+
+pub async fn serve_path_view(
+    extract::Path(path): extract::Path<PathBuf>,
+    State(state): State<AppState>,
+    Query(query): Query<FetchQuery>,
+) -> impl IntoResponse {
+    // FIXME: nicer errors?
+    view_for_path(&path, state, query).await
+}
+
+pub async fn view_for_path(
+    path_for_view: &Path,
+    state: AppState,
+    query: FetchQuery,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let cache = Arc::clone(&state.cache);
+
+    info!(
+        "Displaying directory view for [{path}]",
+        path = path_for_view.to_string_lossy()
+    );
+
+    let validated_path_for_view = make_good(path_for_view)
+        .wrap_err_with(|| format!("Failed making path {path_for_view:?} goody"))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let lock = cache.read();
+    let path_entries = get_path_from_cache(&validated_path_for_view, &lock)
+        .wrap_err_with(|| format!("Failed fetching contents of path {validated_path_for_view:?}"))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    drop(lock);
+
+    let Some(dir_entries) = path_entries else {
+        return Ok(Redirect::permanent(&format!(
+            "/dl/{p}",
+            p = validated_path_for_view.to_string_lossy()
+        ))
+        .into_response());
+    };
+
+    if query.aria2() {
+        // FIXME: Should this go in /dl instead of /browse?
+        let base_url = &state.base_url;
+        Response::builder()
+            .header("Content-Type", "text/plain")
+            .body(Body::new(generate_aria2(
+                base_url,
+                &validated_path_for_view,
+                &dir_entries,
+            )))
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    } else {
+        DirectoryViewTemplate::new(&validated_path_for_view, dir_entries, query)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+            .map(|template| template.into_response())
     }
 }
