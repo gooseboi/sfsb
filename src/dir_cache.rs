@@ -1,4 +1,3 @@
-use byte_unit::Byte;
 use chrono::{DateTime, Utc};
 use color_eyre::{
     eyre::{ContextCompat, WrapErr},
@@ -21,7 +20,22 @@ impl CacheEntry {
     }
 
     pub fn size_str(&self) -> String {
-        format!("{byte:#}", byte = Byte::from_u64(self.size()))
+        let size = self.size();
+        const BYTE_SIZE: u64 = 1024;
+        if size < BYTE_SIZE {
+            format!("{size} B")
+        } else if size < BYTE_SIZE.pow(2) {
+            let size = (size as f64) / (BYTE_SIZE as f64);
+            format!("{size:.1} KiB")
+        } else if size < BYTE_SIZE.pow(3) {
+            let size = (size as f64) / (BYTE_SIZE as f64).powi(2);
+            format!("{size:.1} MiB")
+        } else if size < BYTE_SIZE.pow(4) {
+            let size = (size as f64) / (BYTE_SIZE as f64).powi(3);
+            format!("{size:.1} GiB")
+        } else {
+            format!("You really shouldn't be serving files that big with this tool...")
+        }
     }
 
     pub fn created(&self) -> &str {
