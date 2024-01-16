@@ -72,8 +72,8 @@ impl Default for SortKey {
 #[template(path = "dir_view.html")]
 pub struct DirectoryViewTemplate {
     parent: Option<String>,
+    display_dirname: String,
     dirname: String,
-    full_dirname: String,
     entries: Vec<CacheEntry>,
     sort_direction: SortDirection,
     sort_key: SortKey,
@@ -136,9 +136,15 @@ impl DirectoryViewTemplate {
                 .map(|p| p.to_owned())
         };
 
-        let full_dirname = data_dir.as_os_str().to_string_lossy().as_ref().to_owned();
+        let dirname = {
+            let mut dirname = data_dir.as_os_str().to_string_lossy().as_ref().to_owned();
+            if !dirname.ends_with('/') {
+                dirname.push('/');
+            }
+            dirname
+        };
         // TODO: add anchors to each directory here
-        let dirname = match full_dirname.as_str() {
+        let display_dirname = match dirname.as_str() {
             "." => String::new(),
             s => s.split('/').intersperse(" / ").collect(),
         };
@@ -181,9 +187,9 @@ impl DirectoryViewTemplate {
         });
         Ok(Self {
             parent,
-            dirname,
+            display_dirname,
             // FIXME: Display the directory properly in the title
-            full_dirname,
+            dirname,
             entries,
             sort_direction: query.sort_direction,
             sort_key: query.sort_key,
