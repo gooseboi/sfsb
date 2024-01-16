@@ -21,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::io::AsyncSeekExt;
+use tokio::io::{AsyncSeekExt, BufReader};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -378,7 +378,8 @@ async fn dl_path(
                     format!("Failed to seek file: {e}"),
                 )
             })?;
-        let stream = tokio_util::io::ReaderStream::new(file);
+        let buffered_file = BufReader::new(file);
+        let stream = tokio_util::io::ReaderStream::new(buffered_file);
         let stream = axum::body::Body::from_stream(stream);
         let sent_len = file_len - start;
         let end = file_len - 1;
