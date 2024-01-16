@@ -35,7 +35,7 @@ impl CacheEntry {
             let size = (size as f64) / (BYTE_SIZE as f64).powi(3);
             format!("{size:.1} GiB")
         } else {
-            format!("You really shouldn't be serving files that big with this tool...")
+            "You really shouldn't be serving files that big with this tool...".to_owned()
         }
     }
 
