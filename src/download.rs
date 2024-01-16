@@ -39,6 +39,7 @@ pub async fn dl_path(
     let file_len = metadata.len();
     let ext = path.extension().map(|s| s.to_str().unwrap());
     let content_type = content_type_from_extension(ext);
+    let file_name = file_path.file_name().unwrap().to_string_lossy();
     if headers.contains_key("Range") {
         let ranges = headers
             .get("Range")
@@ -61,7 +62,7 @@ pub async fn dl_path(
             .context("Range without starting range not supported")
             .map_err(|e| (StatusCode::RANGE_NOT_SATISFIABLE, e.to_string()))?;
 
-        let mut file = tokio::fs::File::open(file_path)
+        let mut file = tokio::fs::File::open(&file_path)
             .await
             .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
         if start > file_len {
@@ -90,12 +91,12 @@ pub async fn dl_path(
             .header("Content-Type", content_type)
             .header(
                 "Content-Disposition",
-                format!("attachment; filename=\"{p}\"", p = path.to_string_lossy()),
+                format!("attachment; filename=\"{file_name}\""),
             )
             .body(stream)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
     } else {
-        let file = tokio::fs::File::open(file_path)
+        let file = tokio::fs::File::open(&file_path)
             .await
             .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
         let buffered_file = BufReader::new(file);
@@ -108,7 +109,7 @@ pub async fn dl_path(
             .header("Content-Type", content_type)
             .header(
                 "Content-Disposition",
-                format!("attachment; filename=\"{p}\"", p = path.to_string_lossy()),
+                format!("attachment; filename=\"{file_name}\""),
             )
             .body(stream)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
