@@ -41,23 +41,23 @@ struct AppState {
 }
 
 impl AppState {
-    fn new() -> Self {
-        let admin_username = env::var("SFSB_ADMIN_USERNAME").unwrap().into();
+    fn new() -> Result<Self> {
+        let admin_username = env::var("SFSB_ADMIN_USERNAME").wrap_err("Could not get environment variable SFSB_ADMIN_USERNAME")?.into();
         // FIXME: Hash this?
-        let admin_password = env::var("SFSB_ADMIN_PASSWORD").unwrap().into();
-        let base_url = env::var("SFSB_BASE_URL").unwrap();
-        let base_url = Arc::new(Url::parse(&base_url).unwrap());
+        let admin_password = env::var("SFSB_ADMIN_PASSWORD").wrap_err("Could not get environment variable SFSB_ADMIN_PASSWORD")?.into();
+        let base_url = env::var("SFSB_BASE_URL").wrap_err("Could not get environment variable SFSB_BASE_URL")?;
+        let base_url = Arc::new(Url::parse(&base_url).wrap_err("Could not parse environment variable SFSB_BASE_URL into a url")?);
         let data_dir = env::var("SFSB_DATA_DIR").unwrap_or("./data".into());
         let data_dir = PathBuf::from(&data_dir).into();
         let cache = Arc::new(RwLock::new(vec![]));
 
-        AppState {
+        Ok(AppState {
             _admin_username: admin_username,
             _admin_password: admin_password,
             base_url,
             data_dir,
             cache,
-        }
+        })
     }
 }
 
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
         .init();
     color_eyre::install()?;
 
-    let state = AppState::new();
+    let state = AppState::new().wrap_err("Could not get app config").unwrap();
     let data_dir = Arc::clone(&state.data_dir);
     let cache = Arc::clone(&state.cache);
 
