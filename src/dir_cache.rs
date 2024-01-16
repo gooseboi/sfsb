@@ -1,3 +1,4 @@
+use askama::filters::urlencode;
 use chrono::{DateTime, Utc};
 use color_eyre::{
     eyre::{ContextCompat, WrapErr},
@@ -52,6 +53,10 @@ impl CacheEntry {
             File(f) => &f.name,
             Dir(d) => &d.name,
         }
+    }
+
+    pub fn name_url_encoded(&self) -> String {
+        urlencode(self.name()).expect("TODO: Handle invalid chars in name")
     }
 
     pub fn is_dir(&self) -> bool {

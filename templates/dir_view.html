@@ -75,10 +75,9 @@
 		{% for entry in entries %}
 		<tr>
 			{% if entry.is_dir() %}
-				{% let entry = entry.as_dir() %}
-				<td><a href="{{entry.name}}/"><strong>{{ entry.name }}</strong></a></td>
+				<td><a href="{{entry.name_url_encoded()}}/"><strong>{{ entry.name() }}</strong></a></td>
 			{% else %}
-				<td>{{ entry.as_file().name }}</td>
+				<td><a href="/dl/{{full_dirname}}{{entry.name_url_encoded()}}">{{ entry.as_file().name }}</a></td>
 			{% endif %}
 			<td>{{ entry.created() }}</td>
 			<td>{{ entry.size_str() }}</td>

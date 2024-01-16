@@ -14,7 +14,7 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
-use tracing::{debug, info};
+use tracing::info;
 use url::Url;
 
 use askama::Template;
@@ -120,7 +120,6 @@ pub fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Option<Vec<C
         return Ok(None);
     };
 
-    debug!("Recursing into {}", c.as_dir().name);
     return get_path_from_cache(components.as_path(), &c.as_dir().children);
 }
 
