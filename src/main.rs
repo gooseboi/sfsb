@@ -1,7 +1,16 @@
 #![feature(iter_intersperse)]
+#![deny(
+    clippy::enum_glob_use,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::unwrap_used
+)]
 
 use axum::{response::Redirect, routing::get, Router};
-use color_eyre::{eyre::WrapErr, Result};
+use color_eyre::{
+    eyre::{ensure, WrapErr},
+    Result,
+};
 use parking_lot::RwLock;
 use std::{
     env,
@@ -52,20 +61,23 @@ impl AppState {
 
         let base_url = env::var(BASE_URL_VAR)
             .wrap_err_with(|| format!("Could not get environment variable {BASE_URL_VAR}"))?;
-        let base_url = Arc::new(
-            Url::parse(&base_url)
-                .wrap_err_with(|| format!("Could not parse environment variable {BASE_URL_VAR} into a url"))?,
+        let base_url = Arc::new(Url::parse(&base_url).wrap_err_with(|| {
+            format!("Could not parse environment variable {BASE_URL_VAR} into a url")
+        })?);
+        ensure!(
+            !base_url.cannot_be_a_base(),
+            "The server's base url must be a base"
         );
 
-        let data_dir = env::var(DATA_DIR_VAR).unwrap_or("./data".into());
+        let data_dir = env::var(DATA_DIR_VAR).unwrap_or_else(|_| "./data".into());
         let data_dir = PathBuf::from(&data_dir).into();
 
-        Ok(AppState {
+        Ok(Self {
             _admin_username: admin_username,
             _admin_password: admin_password,
             base_url,
             data_dir,
-            cache: Default::default(),
+            cache: Arc::default(),
         })
     }
 }
@@ -81,9 +93,7 @@ async fn main() -> Result<()> {
         .init();
     color_eyre::install()?;
 
-    let state = AppState::new()
-        .wrap_err("Could not get app config")
-        .unwrap();
+    let state = AppState::new().expect("Could not get app config");
     let data_dir = Arc::clone(&state.data_dir);
     let cache = Arc::clone(&state.cache);
 
@@ -119,7 +129,7 @@ async fn main() -> Result<()> {
         .route("/browse/*path", get(serve_path_view))
         .route("/dl/*path", get(dl_path))
         .with_state(state);
-    let addr: SocketAddr = "0.0.0.0:3779".parse().unwrap();
+    let addr: SocketAddr = "0.0.0.0:3779".parse().expect("This is a valid address");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 

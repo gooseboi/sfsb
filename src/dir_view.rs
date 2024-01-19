@@ -1,4 +1,4 @@
-use askama_axum::IntoResponse;
+use axum::response::IntoResponse;
 use axum::{
     body::Body,
     extract::{self, Query, State},
@@ -6,7 +6,7 @@ use axum::{
     response::Redirect,
 };
 use color_eyre::{
-    eyre::{bail, ContextCompat, WrapErr, ensure},
+    eyre::{bail, ensure, ContextCompat, WrapErr},
     Result,
 };
 use serde::Deserialize;
@@ -14,7 +14,7 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
-use tracing::{info, debug};
+use tracing::{debug, info};
 use url::Url;
 
 use askama::Template;
@@ -33,7 +33,7 @@ pub struct FetchQuery {
 }
 
 impl FetchQuery {
-    pub fn aria2(&self) -> bool {
+    pub const fn aria2(&self) -> bool {
         self.aria2.is_some()
     }
 }
@@ -80,14 +80,20 @@ pub struct DirectoryViewTemplate {
 }
 
 pub fn validate_path_and_make_relative(path: &Path) -> Result<PathBuf> {
-    ensure!(path.is_relative(), "Path fetched must be relative, got absolute path {path:?}");
+    ensure!(
+        path.is_relative(),
+        "Path fetched must be relative, got absolute path {path:?}"
+    );
 
     if path == Path::new(".") {
         return Ok(PathBuf::new());
     }
 
     let components = path.components();
-    ensure!(components.clone().all(|c| c != Component::ParentDir), "Path cannot have `..`, nice try... (Got path {path:?})");
+    ensure!(
+        components.clone().all(|c| c != Component::ParentDir),
+        "Path cannot have `..`, nice try... (Got path {path:?})"
+    );
 
     let components_vec = components.collect::<Vec<_>>();
     if components_vec[0] == Component::CurDir {
@@ -128,7 +134,7 @@ impl DirectoryViewTemplate {
                 .parent()
                 .map(|p| p.to_str().wrap_err("Parent dir was not UTF-8"))
                 .transpose()?
-                .map(|p| p.to_owned())
+                .map(std::borrow::ToOwned::to_owned)
         };
 
         let dirname = {
@@ -200,7 +206,7 @@ pub fn generate_aria2(base_url: &Url, _fetch_dir: &Path, entries: &[CacheEntry])
             let mut entry_url = base_url.clone();
             entry_url
                 .path_segments_mut()
-                .unwrap()
+                .expect("Base url provided is a base")
                 .push("dl")
                 .push(entry.name());
             let mut entry_str = String::new();
@@ -223,7 +229,7 @@ pub async fn root_directory_view(
     State(state): State<AppState>,
     Query(query): Query<FetchQuery>,
 ) -> impl IntoResponse {
-    view_for_path(Path::new("."), state, query).await
+    view_for_path(Path::new("."), &state, query)
 }
 
 pub async fn serve_path_view(
@@ -232,12 +238,12 @@ pub async fn serve_path_view(
     Query(query): Query<FetchQuery>,
 ) -> impl IntoResponse {
     // FIXME: nicer errors?
-    view_for_path(&path, state, query).await
+    view_for_path(&path, &state, query)
 }
 
-pub async fn view_for_path(
+pub fn view_for_path(
     path_for_view: &Path,
-    state: AppState,
+    state: &AppState,
     query: FetchQuery,
 ) -> Result<Response<Body>, (StatusCode, String)> {
     let cache = Arc::clone(&state.cache);
@@ -282,6 +288,6 @@ pub async fn view_for_path(
     } else {
         DirectoryViewTemplate::new(&validated_path_for_view, dir_entries, query)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
-            .map(|template| template.into_response())
+            .map(IntoResponse::into_response)
     }
 }

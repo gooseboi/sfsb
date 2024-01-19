@@ -13,16 +13,17 @@ pub enum CacheEntry {
 
 impl CacheEntry {
     pub fn size(&self) -> u64 {
-        use CacheEntry::*;
         match self {
-            File(f) => f.size,
-            Dir(d) => d.children.iter().map(|e| e.size()).sum(),
+            Self::File(f) => f.size,
+            Self::Dir(d) => d.children.iter().map(Self::size).sum(),
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     pub fn size_str(&self) -> String {
-        let size = self.size();
         const BYTE_SIZE: u64 = 1024;
+
+        let size = self.size();
         if size < BYTE_SIZE {
             format!("{size} B")
         } else if size < BYTE_SIZE.pow(2) {
@@ -40,18 +41,16 @@ impl CacheEntry {
     }
 
     pub fn created(&self) -> &str {
-        use CacheEntry::*;
         match self {
-            File(f) => &f.created,
-            Dir(d) => &d.created,
+            Self::File(f) => &f.created,
+            Self::Dir(d) => &d.created,
         }
     }
 
     pub fn name(&self) -> &str {
-        use CacheEntry::*;
         match self {
-            File(f) => &f.name,
-            Dir(d) => &d.name,
+            Self::File(f) => &f.name,
+            Self::Dir(d) => &d.name,
         }
     }
 
@@ -59,31 +58,29 @@ impl CacheEntry {
         urlencode(self.name()).expect("TODO: Handle invalid chars in name")
     }
 
-    pub fn is_dir(&self) -> bool {
-        use CacheEntry::*;
+    pub const fn is_dir(&self) -> bool {
         match self {
-            File(_) => false,
-            Dir(_) => true,
+            Self::File(_) => false,
+            Self::Dir(_) => true,
         }
     }
 
-    pub fn is_file(&self) -> bool {
-        use CacheEntry::*;
+    pub const fn is_file(&self) -> bool {
         match self {
-            File(_) => true,
-            Dir(_) => false,
+            Self::File(_) => true,
+            Self::Dir(_) => false,
         }
     }
 
     pub fn as_dir(&self) -> &DirEntry {
-        let CacheEntry::Dir(entry) = self else {
+        let Self::Dir(entry) = self else {
             unreachable!()
         };
         entry
     }
 
     pub fn as_file(&self) -> &FileEntry {
-        let CacheEntry::File(entry) = self else {
+        let Self::File(entry) = self else {
             unreachable!()
         };
         entry
@@ -147,7 +144,7 @@ impl TryFrom<std::fs::DirEntry> for CacheEntry {
         let created = created.format("%Y-%m-%d [%H:%M:%S]").to_string();
 
         if is_dir {
-            let children: Vec<CacheEntry> = {
+            let children: Vec<Self> = {
                 let entries = value
                     .path()
                     .read_dir()
@@ -162,14 +159,14 @@ impl TryFrom<std::fs::DirEntry> for CacheEntry {
                 }
                 children
             };
-            Ok(CacheEntry::Dir(DirEntry {
+            Ok(Self::Dir(DirEntry {
                 name,
                 created,
                 children,
             }))
         } else {
             let size = meta.len();
-            Ok(CacheEntry::File(FileEntry {
+            Ok(Self::File(FileEntry {
                 name,
                 created,
                 size,

@@ -4,6 +4,7 @@ pub fn content_type_from_extension(ext: Option<&str>) -> &str {
         // FIXME: text/plain or application/octet-stream?
         return "text/plain";
     };
+    #[allow(clippy::wildcard_in_or_patterns)]
     match ext {
         ".aac" => "audio/aac",
         ".abw" => "application/x-abiword",
@@ -31,11 +32,10 @@ pub fn content_type_from_extension(ext: Option<&str>) -> &str {
         ".ics" => "text/calendar",
         ".jar" => "application/java-archive",
         ".jpeg" | ".jpg" => "image/jpeg",
-        ".js" => "text/javascript",
+        ".mjs" | ".js" => "text/javascript",
         ".json" => "application/json",
         ".jsonld" => "application/ld+json",
         ".mid," => "audio/midi",
-        ".mjs" => "text/javascript",
         ".mp3" => "audio/mpeg",
         ".mp4" => "video/mp4",
         ".mpeg" => "video/mpeg",
@@ -61,7 +61,6 @@ pub fn content_type_from_extension(ext: Option<&str>) -> &str {
         ".tif" | ".tiff" => "image/tiff",
         ".ts" => "video/mp2t",
         ".ttf" => "font/ttf",
-        ".txt" => "text/plain",
         ".vsd" => "application/vnd.visio",
         ".wav" => "audio/wav",
         ".weba" => "audio/webm",
@@ -79,6 +78,6 @@ pub fn content_type_from_extension(ext: Option<&str>) -> &str {
         ".3g2" => "video/3gpp2",
         ".7z" => "application/x-7z-compressed",
         // FIXME: Same as above
-        _ => "text/plain",
+        ".txt" | _ => "text/plain",
     }
 }
