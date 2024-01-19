@@ -6,7 +6,7 @@ use axum::{
     response::Redirect,
 };
 use color_eyre::{
-    eyre::{bail, ContextCompat, WrapErr},
+    eyre::{bail, ContextCompat, WrapErr, ensure},
     Result,
 };
 use serde::Deserialize;
@@ -14,7 +14,7 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
-use tracing::info;
+use tracing::{info, debug};
 use url::Url;
 
 use askama::Template;
@@ -79,20 +79,15 @@ pub struct DirectoryViewTemplate {
     sort_key: SortKey,
 }
 
-/// Make the path be in the format we want
-pub fn make_good(path: &Path) -> Result<PathBuf> {
-    if path.is_absolute() {
-        bail!("Path cannot be absolute, they no worky, got path {path:?}")
-    }
+pub fn validate_path_and_make_relative(path: &Path) -> Result<PathBuf> {
+    ensure!(path.is_relative(), "Path fetched must be relative, got absolute path {path:?}");
 
     if path == Path::new(".") {
         return Ok(PathBuf::new());
     }
 
     let components = path.components();
-    if components.clone().any(|c| c == Component::ParentDir) {
-        bail!("Path cannot have `..`, nice try...");
-    }
+    ensure!(components.clone().all(|c| c != Component::ParentDir), "Path cannot have `..`, nice try... (Got path {path:?})");
 
     let components_vec = components.collect::<Vec<_>>();
     if components_vec[0] == Component::CurDir {
@@ -248,11 +243,13 @@ pub async fn view_for_path(
     let cache = Arc::clone(&state.cache);
 
     info!(
-        "Displaying directory view for [{path}]",
-        path = path_for_view.to_string_lossy()
+        path = ?path_for_view,
+        "Displaying directory view"
     );
 
-    let validated_path_for_view = make_good(path_for_view)
+    debug!(fetch_query = ?query);
+
+    let validated_path_for_view = validate_path_and_make_relative(path_for_view)
         .wrap_err_with(|| format!("Failed making path {path_for_view:?} goody"))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -262,6 +259,7 @@ pub async fn view_for_path(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     drop(lock);
 
+    // If we have no dir entries, user tried to browse a file
     let Some(dir_entries) = path_entries else {
         return Ok(Redirect::permanent(&format!(
             "/dl/{p}",

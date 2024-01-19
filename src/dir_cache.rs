@@ -26,7 +26,7 @@ impl CacheEntry {
         if size < BYTE_SIZE {
             format!("{size} B")
         } else if size < BYTE_SIZE.pow(2) {
-            let size = (size as f64) / (BYTE_SIZE as f64);
+            let size = (size as f64) / (BYTE_SIZE as f64).powi(1);
             format!("{size:.1} KiB")
         } else if size < BYTE_SIZE.pow(3) {
             let size = (size as f64) / (BYTE_SIZE as f64).powi(2);
