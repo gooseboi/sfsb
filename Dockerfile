@@ -27,8 +27,6 @@ RUN set -eux; \
 WORKDIR /app
 COPY . .
 
-RUN cargo install minhtml
-
 RUN --mount=type=cache,target=/root/.rustup \
     --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
