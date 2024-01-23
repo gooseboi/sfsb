@@ -9,6 +9,7 @@ edition = "2021"
 askama = { version = "0.12.1", features = ["with-axum"] }
 askama_axum = "0.4.0"
 axum = { version = "0.7.3", features = ["http2"] }
+camino = "1.1.6"
 chrono = "0.4.31"
 color-eyre = "0.6.2"
 notify = "6.1.1"

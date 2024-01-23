@@ -7,17 +7,13 @@
 )]
 
 use axum::{response::Redirect, routing::get, Router};
+use camino::{Utf8Path, Utf8PathBuf};
 use color_eyre::{
     eyre::{ensure, WrapErr},
     Result,
 };
 use parking_lot::RwLock;
-use std::{
-    env,
-    net::SocketAddr,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{env, net::SocketAddr, sync::Arc};
 use tracing::error;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -39,7 +35,9 @@ struct AppState {
     _admin_username: Arc<str>,
     _admin_password: Arc<str>,
     base_url: Arc<Url>,
-    data_dir: Arc<Path>,
+    data_dir: Arc<Utf8Path>,
+    // TODO: Use ArcSwap
+    // TODO: Update this upon directory event
     cache: Arc<RwLock<Vec<CacheEntry>>>,
 }
 
@@ -70,7 +68,7 @@ impl AppState {
         );
 
         let data_dir = env::var(DATA_DIR_VAR).unwrap_or_else(|_| "./data".into());
-        let data_dir = PathBuf::from(&data_dir).into();
+        let data_dir = Utf8PathBuf::from(&data_dir).into();
 
         Ok(Self {
             _admin_username: admin_username,

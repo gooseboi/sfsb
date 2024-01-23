@@ -3,14 +3,12 @@ use axum::{
     extract::{self, State},
     http::{HeaderMap, Response, StatusCode},
 };
+use camino::{Utf8Path, Utf8PathBuf};
 use color_eyre::{
     eyre::{ensure, ContextCompat, WrapErr},
     Result,
 };
-use std::{
-    io::SeekFrom,
-    path::{Path, PathBuf},
-};
+use std::{io::SeekFrom, path::PathBuf};
 use tokio::io::{AsyncSeekExt as _, BufReader};
 use tracing::{debug, info};
 
@@ -20,7 +18,7 @@ use crate::utils::content_type_from_extension;
 use crate::AppState;
 
 pub async fn dl_range(
-    path_relative_to_data: &Path,
+    path_relative_to_data: &Utf8Path,
     file_name: &str,
     file_len: u64,
     ranges: Ranges,
@@ -93,6 +91,8 @@ pub async fn dl_path(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Response<Body>, (StatusCode, String)> {
+    let fetched_path = Utf8PathBuf::from_path_buf(fetched_path)
+        .map_err(|p| (StatusCode::BAD_REQUEST, format!("Path {p:?} was not UTF-8")))?;
     info!(?fetched_path, "Downloading path");
 
     let path_relative_to_data = {
@@ -117,14 +117,11 @@ pub async fn dl_path(
     };
 
     let file_len = metadata.len();
-    let ext = fetched_path
-        .extension()
-        .map(|s| s.to_str().expect("Paths should be UTF-8"));
+    let ext = fetched_path.extension();
     let content_type = content_type_from_extension(ext);
     let file_name = path_relative_to_data
         .file_name()
-        .expect("File name should be some since it is validated")
-        .to_string_lossy();
+        .expect("File name should be some since it is validated");
 
     if let Some(ranges) = headers.get("Range") {
         let ranges = ranges
@@ -133,7 +130,7 @@ pub async fn dl_path(
         let ranges = parse_ranges(ranges).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
         dl_range(
             &path_relative_to_data,
-            &file_name,
+            file_name,
             file_len,
             ranges,
             content_type,

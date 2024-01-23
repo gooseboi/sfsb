@@ -5,15 +5,14 @@ use axum::{
     http::{Response, StatusCode},
     response::Redirect,
 };
+use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use color_eyre::{
-    eyre::{bail, ensure, ContextCompat, WrapErr},
+    eyre::{bail, ensure, WrapErr},
     Result,
 };
 use serde::Deserialize;
-use std::{
-    path::{Component, Path, PathBuf},
-    sync::Arc,
-};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::{debug, info};
 use url::Url;
 
@@ -79,32 +78,32 @@ pub struct DirectoryViewTemplate {
     sort_key: SortKey,
 }
 
-pub fn validate_path_and_make_relative(path: &Path) -> Result<PathBuf> {
+pub fn validate_path_and_make_relative(path: &Utf8Path) -> Result<Utf8PathBuf> {
     ensure!(
         path.is_relative(),
         "Path fetched must be relative, got absolute path {path:?}"
     );
 
-    if path == Path::new(".") {
-        return Ok(PathBuf::new());
+    if path == Utf8Path::new(".") {
+        return Ok(Utf8PathBuf::new());
     }
 
     let components = path.components();
     ensure!(
-        components.clone().all(|c| c != Component::ParentDir),
+        components.clone().all(|c| c != Utf8Component::ParentDir),
         "Path cannot have `..`, nice try... (Got path {path:?})"
     );
 
     let components_vec = components.collect::<Vec<_>>();
-    if components_vec[0] == Component::CurDir {
+    if components_vec[0] == Utf8Component::CurDir {
         return Ok(components_vec[1..].iter().collect());
     }
 
     Ok(path.to_path_buf())
 }
 
-pub fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Option<Vec<CacheEntry>>> {
-    if path == Path::new("") {
+pub fn get_path_from_cache(path: &Utf8Path, v: &[CacheEntry]) -> Result<Option<Vec<CacheEntry>>> {
+    if path == Utf8Path::new("") {
         return Ok(Some(v.to_vec()));
     }
 
@@ -113,7 +112,7 @@ pub fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Option<Vec<C
         bail!("No component in path despite path not being empty");
     };
 
-    let Component::Normal(s) = component else {
+    let Utf8Component::Normal(s) = component else {
         bail!("Found component of type not normal in path {path:?}");
     };
 
@@ -125,16 +124,16 @@ pub fn get_path_from_cache(path: &Path, v: &[CacheEntry]) -> Result<Option<Vec<C
 }
 
 impl DirectoryViewTemplate {
-    pub fn new(data_dir: &Path, mut entries: Vec<CacheEntry>, query: FetchQuery) -> Result<Self> {
+    pub fn new(
+        data_dir: &Utf8Path,
+        mut entries: Vec<CacheEntry>,
+        query: FetchQuery,
+    ) -> Self {
         // FIXME: Encode file names
-        let parent = if data_dir == Path::new(".") {
+        let parent = if data_dir == Utf8Path::new(".") {
             None
         } else {
-            data_dir
-                .parent()
-                .map(|p| p.to_str().wrap_err("Parent dir was not UTF-8"))
-                .transpose()?
-                .map(std::borrow::ToOwned::to_owned)
+            data_dir.parent().map(std::string::ToString::to_string)
         };
 
         let dirname = {
@@ -186,7 +185,7 @@ impl DirectoryViewTemplate {
                 ord
             }
         });
-        Ok(Self {
+        Self {
             parent,
             display_dirname,
             // FIXME: Display the directory properly in the title
@@ -194,11 +193,11 @@ impl DirectoryViewTemplate {
             entries,
             sort_direction: query.sort_direction,
             sort_key: query.sort_key,
-        })
+        }
     }
 }
 
-pub fn generate_aria2(base_url: &Url, _fetch_dir: &Path, entries: &[CacheEntry]) -> String {
+pub fn generate_aria2(base_url: &Url, _fetch_dir: &Utf8Path, entries: &[CacheEntry]) -> String {
     let mut list = String::new();
     for entry in entries {
         // TODO: Directories
@@ -229,20 +228,22 @@ pub async fn root_directory_view(
     State(state): State<AppState>,
     Query(query): Query<FetchQuery>,
 ) -> impl IntoResponse {
-    view_for_path(Path::new("."), &state, query)
+    view_for_path(Utf8Path::new("."), &state, query)
 }
 
 pub async fn serve_path_view(
     extract::Path(path): extract::Path<PathBuf>,
     State(state): State<AppState>,
     Query(query): Query<FetchQuery>,
-) -> impl IntoResponse {
+) -> Result<Response<Body>, (StatusCode, String)> {
     // FIXME: nicer errors?
+    let path = Utf8PathBuf::from_path_buf(path)
+        .map_err(|p| (StatusCode::BAD_REQUEST, format!("Path {p:?} was not UTF-8")))?;
     view_for_path(&path, &state, query)
 }
 
 pub fn view_for_path(
-    path_for_view: &Path,
+    path_for_view: &Utf8Path,
     state: &AppState,
     query: FetchQuery,
 ) -> Result<Response<Body>, (StatusCode, String)> {
@@ -267,11 +268,7 @@ pub fn view_for_path(
 
     // If we have no dir entries, user tried to browse a file
     let Some(dir_entries) = path_entries else {
-        return Ok(Redirect::permanent(&format!(
-            "/dl/{p}",
-            p = validated_path_for_view.to_string_lossy()
-        ))
-        .into_response());
+        return Ok(Redirect::permanent(&format!("/dl/{validated_path_for_view}")).into_response());
     };
 
     if query.aria2() {
@@ -286,8 +283,6 @@ pub fn view_for_path(
             )))
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
     } else {
-        DirectoryViewTemplate::new(&validated_path_for_view, dir_entries, query)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
-            .map(IntoResponse::into_response)
+        Ok(DirectoryViewTemplate::new(&validated_path_for_view, dir_entries, query).into_response())
     }
 }
