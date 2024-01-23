@@ -1,3 +1,6 @@
+use itertools::{EitherOrBoth::{Left, Right, Both}, Itertools as _};
+use std::cmp::Ordering;
+
 pub fn content_type_from_extension(ext: Option<&str>) -> &str {
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
     let Some(ext) = ext else {
@@ -80,4 +83,17 @@ pub fn content_type_from_extension(ext: Option<&str>) -> &str {
         // FIXME: Same as above
         ".txt" | _ => "text/plain",
     }
+}
+
+pub fn cmp_ignore_case_utf8(a: &str, b: &str) -> Ordering {
+    a.chars()
+        .flat_map(char::to_lowercase)
+        .zip_longest(b.chars().flat_map(char::to_lowercase))
+        .map(|ab| match ab {
+            Left(_) => Ordering::Greater,
+            Right(_) => Ordering::Less,
+            Both(a, b) => a.cmp(&b),
+        })
+        .find(|&ordering| ordering != Ordering::Equal)
+        .unwrap_or(Ordering::Equal)
 }

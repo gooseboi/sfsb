@@ -5,7 +5,7 @@ use color_eyre::{
     Report, Result,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum CacheEntry {
     File(FileEntry),
     Dir(DirEntry),
@@ -89,7 +89,7 @@ impl CacheEntry {
 
 /// Struct that represents a file/directory inside a directory, that can
 /// access all its fields without erroring, because it errors upon construction
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DirEntry {
     /// Name of the file
     pub name: String,
@@ -107,7 +107,7 @@ impl DirEntry {
 
 /// Struct that represents a file/directory inside a directory, that can
 /// access all its fields without erroring, because it errors upon construction
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FileEntry {
     /// Name of the file
     pub name: String,

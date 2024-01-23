@@ -18,7 +18,7 @@ use url::Url;
 
 use askama::Template;
 
-use crate::{dir_cache::CacheEntry, AppState};
+use crate::{dir_cache::CacheEntry, utils::cmp_ignore_case_utf8, AppState};
 
 #[derive(Deserialize, Debug)]
 pub struct FetchQuery {
@@ -197,31 +197,64 @@ impl DirectoryViewTemplate {
     }
 }
 
-pub fn generate_aria2(base_url: &Url, _fetch_dir: &Utf8Path, entries: &[CacheEntry]) -> String {
-    let mut list = String::new();
-    for entry in entries {
-        // TODO: Directories
-        if entry.is_file() {
-            let mut entry_url = base_url.clone();
-            entry_url
-                .path_segments_mut()
-                .expect("Base url provided is a base")
-                .push("dl")
-                .push(entry.name());
-            let mut entry_str = String::new();
-            entry_str.push_str(entry_url.as_str());
-            entry_str.push('\n');
-            entry_str.push('\t');
-            entry_str.push_str("dir=.");
-            entry_str.push('\n');
-            entry_str.push('\t');
-            entry_str.push_str(&format!("out={name}", name = entry.name()));
-            entry_str.push('\n');
-            entry_str.push('\n');
-            list.push_str(&entry_str);
+pub fn generate_aria2(base_url: &Url, entries: &[CacheEntry]) -> String {
+    fn generate_aria2_helper(
+        base_url: &Url,
+        fetch_dir: &Utf8Path,
+        entries: &[CacheEntry],
+    ) -> String {
+        let mut file_list = String::new();
+        let mut subdir_list = String::new();
+        let aria2_dir = if fetch_dir == Utf8Path::new("") {
+            ".".to_string()
+        } else {
+            fetch_dir.as_str().trim_end_matches('/').to_string()
+        };
+        let mut entries = entries.to_vec();
+        entries.sort_by(|e1, e2| cmp_ignore_case_utf8(e1.name(), e2.name()));
+        for entry in entries {
+            if entry.is_file() {
+                let mut entry_url = base_url.clone();
+                {
+                    let mut path_segments = entry_url
+                        .path_segments_mut()
+                        .expect("Base url provided is a base");
+                    path_segments.push("dl");
+
+                    fetch_dir.components().for_each(|c| {
+                        path_segments.push(c.as_ref());
+                    });
+
+                    path_segments.push(entry.name());
+                }
+                let mut entry_str = String::new();
+                entry_str.push_str(entry_url.as_str());
+                entry_str.push('\n');
+                entry_str.push_str(&' '.to_string().repeat(2));
+                entry_str.push_str(&format!("dir={aria2_dir}"));
+                entry_str.push('\n');
+                entry_str.push_str(&' '.to_string().repeat(2));
+                entry_str.push_str(&format!("out={name}", name = entry.name()));
+                entry_str.push('\n');
+                entry_str.push('\n');
+                file_list.push_str(&entry_str);
+            } else if entry.is_dir() {
+                let entry_path = {
+                    let mut fetch_dir = fetch_dir.to_path_buf();
+                    fetch_dir.push(entry.name());
+                    fetch_dir
+                };
+                subdir_list.push_str(&generate_aria2_helper(
+                    base_url,
+                    &entry_path,
+                    &entry.as_dir().children,
+                ));
+            }
         }
+        file_list.push_str(&subdir_list);
+        file_list
     }
-    list
+    generate_aria2_helper(base_url, "".into(), entries)
 }
 
 pub async fn root_directory_view(
@@ -276,11 +309,7 @@ pub fn view_for_path(
         let base_url = &state.base_url;
         Response::builder()
             .header("Content-Type", "text/plain")
-            .body(Body::new(generate_aria2(
-                base_url,
-                &validated_path_for_view,
-                &dir_entries,
-            )))
+            .body(Body::new(generate_aria2(base_url, &dir_entries)))
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
     } else {
         Ok(DirectoryViewTemplate::new(&validated_path_for_view, dir_entries, query).into_response())
