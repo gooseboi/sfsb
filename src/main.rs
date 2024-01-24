@@ -108,7 +108,8 @@ async fn main() -> Result<()> {
             let entries = match entries {
                 Ok(entries) => entries,
                 Err(e) => {
-                    error!("Failed to parse contents of data dir {data_dir:?}: {e}");
+                    let errors = e.chain().map(|e| e.to_string()).collect::<Vec<_>>();
+                    error!("Failed to parse contents of data dir {data_dir:?}: {errors:?}");
                     continue;
                 }
             };
