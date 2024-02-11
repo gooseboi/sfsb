@@ -124,11 +124,7 @@ pub fn get_path_from_cache(path: &Utf8Path, v: &[CacheEntry]) -> Result<Option<V
 }
 
 impl DirectoryViewTemplate {
-    pub fn new(
-        data_dir: &Utf8Path,
-        mut entries: Vec<CacheEntry>,
-        query: FetchQuery,
-    ) -> Self {
+    pub fn new(data_dir: &Utf8Path, mut entries: Vec<CacheEntry>, query: FetchQuery) -> Self {
         // FIXME: Encode file names
         let parent = if data_dir == Utf8Path::new(".") {
             None
@@ -312,6 +308,9 @@ pub fn view_for_path(
             .body(Body::new(generate_aria2(base_url, &dir_entries)))
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
     } else {
-        Ok(DirectoryViewTemplate::new(&validated_path_for_view, dir_entries, query).into_response())
+        Ok(
+            DirectoryViewTemplate::new(&validated_path_for_view, dir_entries, query)
+                .into_response(),
+        )
     }
 }

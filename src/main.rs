@@ -97,7 +97,10 @@ async fn inner_main(state: AppState) -> Result<()> {
             let entries = match entries {
                 Ok(entries) => entries,
                 Err(e) => {
-                    let errors = e.chain().map(std::string::ToString::to_string).collect::<Vec<_>>();
+                    let errors = e
+                        .chain()
+                        .map(std::string::ToString::to_string)
+                        .collect::<Vec<_>>();
                     error!("Failed to parse contents of data dir {data_dir:?}: {errors:?}");
                     continue;
                 }

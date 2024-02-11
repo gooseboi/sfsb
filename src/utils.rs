@@ -1,4 +1,7 @@
-use itertools::{EitherOrBoth::{Left, Right, Both}, Itertools as _};
+use itertools::{
+    EitherOrBoth::{Both, Left, Right},
+    Itertools as _,
+};
 use std::cmp::Ordering;
 
 pub fn content_type_from_extension(ext: Option<&str>) -> &str {
