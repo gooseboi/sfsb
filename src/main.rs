@@ -80,18 +80,7 @@ impl AppState {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "sfsb=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-    color_eyre::install()?;
-
-    let state = AppState::new().expect("Could not get app config");
+async fn inner_main(state: AppState) -> Result<()> {
     let data_dir = Arc::clone(&state.data_dir);
     let cache = Arc::clone(&state.cache);
 
@@ -134,4 +123,49 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+fn main() -> Result<()> {
+    const NUM_THREADS_VAR: &str = "SFSB_NUM_THREADS";
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "sfsb=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+    color_eyre::install()?;
+
+    let state = AppState::new().expect("Could not get app config");
+
+    let num_threads = env::var(NUM_THREADS_VAR)
+        .wrap_err_with(|| format!("Could not get environment variable {NUM_THREADS_VAR}"))?
+        .parse()
+        .unwrap_or_else(|_| {
+            panic!("Expected environment variable {NUM_THREADS_VAR} to be a number")
+        });
+
+    let rt = match num_threads {
+        0 => {
+            let mut builder = tokio::runtime::Builder::new_multi_thread();
+            builder.enable_all();
+            builder
+        }
+        1 => {
+            let mut builder = tokio::runtime::Builder::new_current_thread();
+            builder.enable_all();
+            builder
+        }
+        n => {
+            let mut builder = tokio::runtime::Builder::new_current_thread();
+            builder.enable_all().worker_threads(n);
+            builder
+        }
+    }
+    .build()
+    .expect("Failed building tokio runtime");
+
+    info!(threads = num_threads, "Starting runtime");
+    rt.block_on(inner_main(state))
 }
