@@ -12,6 +12,7 @@ use color_eyre::{
     eyre::{ensure, WrapErr},
     Result,
 };
+use notify::{RecursiveMode, Watcher as _};
 use parking_lot::RwLock;
 use std::{env, net::SocketAddr, sync::Arc};
 use tracing::{error, info};
@@ -79,36 +80,34 @@ impl AppState {
         })
     }
 }
+fn refresh_cache(cache: &RwLock<Vec<CacheEntry>>, data_dir: &Utf8Path) -> Result<()> {
+    let entries = data_dir.read_dir().wrap_err_with(|| format!("Failed to read contents of data dir {data_dir}"))?;
+    let entries: Result<Vec<CacheEntry>> = entries.map(|e| e?.try_into()).collect();
+    let entries = entries.wrap_err_with(|| format!("Failed to parse contents of data dir {data_dir}"))?;
+    {
+        let mut lock = cache.write();
+        *lock = entries;
+    }
+    info!("Updated data dir cache after event");
+
+    Ok(())
+}
 
 async fn inner_main(state: AppState) -> Result<()> {
     let data_dir = Arc::clone(&state.data_dir);
     let cache = Arc::clone(&state.cache);
 
-    tokio::spawn(async move {
+    refresh_cache(&cache, &data_dir).expect("Failed refreshing cache");
+    tokio::task::spawn_blocking(move || {
+        let data_dir_watch = Arc::clone(&data_dir);
+        let mut watcher = notify::recommended_watcher(move |res| match res {
+            Ok(_) => refresh_cache(&cache, &data_dir).expect("Failed refreshing cache"),
+            Err(e) => error!("Got error {e} when watching data dir"),
+        })
+        .expect("Failed creating watcher");
+
         loop {
-            let entries = match data_dir.read_dir() {
-                Ok(entries) => entries,
-                Err(e) => {
-                    error!("Failed to read contents of data dir {data_dir:?}: {e}");
-                    continue;
-                }
-            };
-            let entries: Result<Vec<CacheEntry>> = entries.map(|e| e?.try_into()).collect();
-            let entries = match entries {
-                Ok(entries) => entries,
-                Err(e) => {
-                    let errors = e
-                        .chain()
-                        .map(std::string::ToString::to_string)
-                        .collect::<Vec<_>>();
-                    error!("Failed to parse contents of data dir {data_dir:?}: {errors:?}");
-                    continue;
-                }
-            };
-            let mut lock = cache.write();
-            *lock = entries;
-            drop(lock);
-            break;
+            watcher.watch(data_dir_watch.as_std_path(), RecursiveMode::Recursive).expect("Failed watching data dir")
         }
     });
 
