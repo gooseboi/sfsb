@@ -14,7 +14,7 @@ use color_eyre::{
 };
 use parking_lot::RwLock;
 use std::{env, net::SocketAddr, sync::Arc};
-use tracing::error;
+use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
@@ -130,6 +130,7 @@ async fn main() -> Result<()> {
         .with_state(state);
     let addr: SocketAddr = "0.0.0.0:3779".parse().expect("This is a valid address");
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    info!("Server listening on {addr}");
     axum::serve(listener, app).await?;
 
     Ok(())
