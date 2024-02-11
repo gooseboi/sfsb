@@ -2,8 +2,7 @@
 FROM debian:bookworm-20231009-slim as rust_builder
 
 # Install curl and deps
-RUN set -eux; \
-	apt-get update; \
+RUN apt-get update; \
 	apt-get install -y --no-install-recommends \
 		curl ca-certificates gcc libc6-dev pkg-config libssl-dev;
 
@@ -11,17 +10,17 @@ RUN set -eux; \
 # We don't really care what toolchain it installs, as we just use
 # rust-toolchain.toml, but as far as I know there is no way to just install
 # the toolchain in the file at this point
-RUN set -eux; \
-		curl --location --fail \
-			"https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init" \
-			--output /rustup-init; \
-		chmod +x /rustup-init; \
-		/rustup-init -y --no-modify-path --profile minimal --no-update-default-toolchain; \
-		rm /rustup-init;
+RUN curl --location --fail \
+        "https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init" \
+		--output /rustup-init; \
+    chmod +x /rustup-init; \
+	/rustup-init -y --no-modify-path --profile minimal --no-update-default-toolchain; \
+	rm /rustup-init;
 
 ENV PATH=${PATH}:/root/.cargo/bin
-RUN set -eux; \
-		rustup --version
+RUN rustup --version
+
+RUN cargo install just
 
 # Copy sources and build them
 WORKDIR /app
@@ -34,7 +33,7 @@ RUN --mount=type=cache,target=/root/.rustup \
 	--mount=type=cache,target=/app/target/deps \
 	--mount=type=cache,target=/app/target/incremental \
 	set -eux; \
-	cargo build --release
+	just build_release
 
 FROM debian:bookworm-20231009-slim
 
