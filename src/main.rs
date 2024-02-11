@@ -106,8 +106,7 @@ async fn inner_main(state: AppState) -> Result<()> {
                 }
             };
             let mut lock = cache.write();
-            lock.clear();
-            lock.extend(entries);
+            *lock = entries;
             drop(lock);
             break;
         }
