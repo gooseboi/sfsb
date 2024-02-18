@@ -14,7 +14,7 @@ use color_eyre::{
 };
 use notify::{RecursiveMode, Watcher as _};
 use parking_lot::RwLock;
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -80,10 +80,14 @@ impl AppState {
         })
     }
 }
+
 fn refresh_cache(cache: &RwLock<Vec<CacheEntry>>, data_dir: &Utf8Path) -> Result<()> {
-    let entries = data_dir.read_dir().wrap_err_with(|| format!("Failed to read contents of data dir {data_dir}"))?;
+    let entries = data_dir
+        .read_dir()
+        .wrap_err_with(|| format!("Failed to read contents of data dir {data_dir}"))?;
     let entries: Result<Vec<CacheEntry>> = entries.map(|e| e?.try_into()).collect();
-    let entries = entries.wrap_err_with(|| format!("Failed to parse contents of data dir {data_dir}"))?;
+    let entries =
+        entries.wrap_err_with(|| format!("Failed to parse contents of data dir {data_dir}"))?;
     {
         let mut lock = cache.write();
         *lock = entries;
@@ -100,14 +104,21 @@ async fn inner_main(state: AppState) -> Result<()> {
     refresh_cache(&cache, &data_dir).expect("Failed refreshing cache");
     tokio::task::spawn_blocking(move || {
         let data_dir_watch = Arc::clone(&data_dir);
-        let mut watcher = notify::recommended_watcher(move |res| match res {
-            Ok(_) => refresh_cache(&cache, &data_dir).expect("Failed refreshing cache"),
-            Err(e) => error!("Got error {e} when watching data dir"),
-        })
-        .expect("Failed creating watcher");
+        let (tx, rx) = std::sync::mpsc::channel();
 
-        loop {
-            watcher.watch(data_dir_watch.as_std_path(), RecursiveMode::Recursive).expect("Failed watching data dir")
+        let mut watcher = notify_debouncer_full::new_debouncer(Duration::from_secs(1), None, tx)
+            .expect("Failed creating watcher for data dir");
+
+        watcher
+            .watcher()
+            .watch(data_dir_watch.as_std_path(), RecursiveMode::Recursive)
+            .expect("Failed watching data dir");
+
+        for res in rx {
+            match res {
+                Ok(_) => refresh_cache(&cache, &data_dir).expect("Failed refreshing cache"),
+                Err(e) => error!("Got error {e:?} when watching data dir"),
+            }
         }
     });
 
