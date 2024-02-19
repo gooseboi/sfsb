@@ -136,7 +136,6 @@ pub fn get_path_from_cache(path: &Utf8Path, v: &[CacheEntry]) -> Result<Option<V
 
 impl DirectoryViewTemplate {
     pub fn new(data_dir: &Utf8Path, mut entries: Vec<CacheEntry>, query: FetchQuery) -> Self {
-        // FIXME: Encode file names
         let parent = if data_dir == Utf8Path::new(".") {
             None
         } else {

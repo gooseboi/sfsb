@@ -37,8 +37,6 @@ struct AppState {
     _admin_password: Arc<str>,
     base_url: Arc<Url>,
     data_dir: Arc<Utf8Path>,
-    // TODO: Use ArcSwap
-    // TODO: Update this upon directory event
     cache: Arc<RwLock<Vec<CacheEntry>>>,
 }
 
