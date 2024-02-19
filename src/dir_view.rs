@@ -1,3 +1,4 @@
+use askama::filters::urlencode;
 use axum::response::IntoResponse;
 use axum::{
     body::Body,
@@ -70,11 +71,21 @@ impl Default for SortKey {
 #[derive(Template)]
 #[template(path = "dir_view.html")]
 pub struct DirectoryViewTemplate {
+    /// String pointing to parent directory of current directory, used to traverse up
     parent: Option<String>,
+    /// List of dirnames with anchor tags used to browse up in the view
+    /// For directory "Some dir/dir1"
+    /// "<a href="/browse/Some%20dir">Some dir</a> / <a href="/browse/Some%20dir/dir1">dir1</a>"
+    list_of_anchors: String,
+    /// Name of the current directory being browsed
     display_dirname: String,
-    dirname: String,
+    /// Directory name urlencoded
+    encoded_dirname: String,
+    /// List of every entry in the current directory
     entries: Vec<CacheEntry>,
+    /// Direction to sort by
     sort_direction: SortDirection,
+    /// What value to sort by
     sort_key: SortKey,
 }
 
@@ -139,10 +150,27 @@ impl DirectoryViewTemplate {
             }
             dirname
         };
-        // TODO: add anchors to each directory here
-        let display_dirname = match dirname.as_str() {
+
+        let encoded_dirname = urlencode(&dirname).expect("TODO: Handle dirnames not urlencodable");
+
+        let list_of_anchors = match dirname.as_str() {
             "." => String::new(),
-            s => s.split('/').intersperse(" / ").collect(),
+            s => {
+                let mut accumulated = String::new();
+                let mut anchor_tags = vec![];
+                for dirname in s.split('/').filter(|s| !s.is_empty()) {
+                    let encoded_dirname =
+                        urlencode(dirname).expect("TODO: Handle invalid url charaters in filename");
+                    let current_relative_dirname = format!("{accumulated}/{encoded_dirname}");
+                    // The / is added by the above line
+                    let anchor_tag = format!(
+                        "<a href=\"/browse{current_relative_dirname}\"><strong>{dirname}</strong></a>"
+                    );
+                    accumulated = current_relative_dirname.clone();
+                    anchor_tags.push(anchor_tag);
+                }
+                anchor_tags.into_iter().intersperse(" / ".into()).collect()
+            }
         };
 
         entries.sort_by(|e1, e2| {
@@ -183,9 +211,10 @@ impl DirectoryViewTemplate {
         });
         Self {
             parent,
-            display_dirname,
+            list_of_anchors,
             // FIXME: Display the directory properly in the title
-            dirname,
+            display_dirname: dirname,
+            encoded_dirname,
             entries,
             sort_direction: query.sort_direction,
             sort_key: query.sort_key,

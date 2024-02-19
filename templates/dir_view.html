@@ -1,7 +1,7 @@
 <html>
 	<head>
 		<meta charset="utf-8">
-		<title>sfsb - {{dirname}}</title>
+		<title>sfsb - {{ display_dirname }}</title>
 		<style>
 			body {
 				font-family: sans-serif;
@@ -46,38 +46,38 @@
 <body>
 <div>
 	{% if parent.is_some() %}<a href="/browse/{{parent.as_ref().unwrap()}}">[..]</a>{% endif %}
-	<a href="/browse/">[Root]</a> / {{ display_dirname }}
+	<a href="/browse/">[Root]</a> / {{ list_of_anchors|escape("none") }}
 </div>
 <div>
 	<table>
 		<tr>
 			{% if sort_key == SortKey::Name && sort_direction == SortDirection::Ascending %}
-				<th><a href="/browse/{{dirname}}?sort=name&ord=desc">Name</a></th>
+				<th><a href="/browse/{{encoded_dirname}}?sort=name&ord=desc">Name</a></th>
 			{% else %}
-				<th><a href="/browse/{{dirname}}?sort=name&ord=asc">Name</a></th>
+				<th><a href="/browse/{{encoded_dirname}}?sort=name&ord=asc">Name</a></th>
 			{% endif %}
 			{% if sort_key == SortKey::Date && sort_direction == SortDirection::Ascending %}
-				<th><a href="/browse/{{dirname}}?sort=date&ord=desc">Creation Time</a></th>
+				<th><a href="/browse/{{encoded_dirname}}?sort=date&ord=desc">Creation Time</a></th>
 			{% else %}
-				<th><a href="/browse/{{dirname}}?sort=date&ord=asc">Creation Time</a></th>
+				<th><a href="/browse/{{encoded_dirname}}?sort=date&ord=asc">Creation Time</a></th>
 			{% endif %}
 			{% if sort_key == SortKey::Size && sort_direction == SortDirection::Ascending %}
-				<th><a href="/browse/{{dirname}}?sort=size&ord=desc">Size</a></th>
+				<th><a href="/browse/{{encoded_dirname}}?sort=size&ord=desc">Size</a></th>
 			{% else %}
-				<th><a href="/browse/{{dirname}}?sort=size&ord=asc">Size</a></th>
+				<th><a href="/browse/{{encoded_dirname}}?sort=size&ord=asc">Size</a></th>
 			{% endif %}
 			{% if sort_key == SortKey::Size && sort_direction == SortDirection::Ascending %}
-				<th><a href="/browse/{{dirname}}?sort=children_count&ord=desc">Children Count</a></th>
+				<th><a href="/browse/{{encoded_dirname}}?sort=children_count&ord=desc">Children Count</a></th>
 			{% else %}
-				<th><a href="/browse/{{dirname}}?sort=children_count&ord=asc">Children Count</a></th>
+				<th><a href="/browse/{{encoded_dirname}}?sort=children_count&ord=asc">Children Count</a></th>
 			{% endif %}
 		</tr>
 		{% for entry in entries %}
 		<tr>
 			{% if entry.is_dir() %}
-				<td><a href="{{entry.name_url_encoded()}}/"><strong>{{ entry.name() }}</strong></a></td>
+				<td><a href="/browse/{{encoded_dirname}}{{entry.name_url_encoded()}}/"><strong>{{ entry.name() }}</strong></a></td>
 			{% else %}
-				<td><a href="/dl/{{dirname}}{{entry.name_url_encoded()}}">{{ entry.as_file().name }}</a></td>
+				<td><a href="/dl/{{encoded_dirname}}{{entry.name_url_encoded()}}">{{ entry.as_file().name }}</a></td>
 			{% endif %}
 			<td>{{ entry.created() }}</td>
 			<td>{{ entry.size_str() }}</td>
