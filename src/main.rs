@@ -37,6 +37,7 @@ struct AppState {
     _admin_password: Arc<str>,
     base_url: Arc<Url>,
     data_dir: Arc<Utf8Path>,
+    port: u16,
     cache: Arc<RwLock<Vec<CacheEntry>>>,
 }
 
@@ -46,6 +47,7 @@ impl AppState {
         const ADMIN_PASSWORD_VAR: &str = "SFSB_ADMIN_PASSWORD";
         const BASE_URL_VAR: &str = "SFSB_BASE_URL";
         const DATA_DIR_VAR: &str = "SFSB_DATA_DIR";
+        const PORT_VAR: &str = "SFSB_PORT";
 
         let admin_username = env::var(ADMIN_USERNAME_VAR)
             .wrap_err_with(|| format!("Could not get environment variable {ADMIN_USERNAME_VAR}"))?
@@ -134,6 +136,7 @@ async fn inner_main(state: AppState) -> Result<()> {
         }
     });
 
+    let port = state.port;
     let app = Router::new()
         .route("/", get(|| async { Redirect::permanent("/browse/") }))
         .route("/browse", get(root_directory_view))
@@ -141,7 +144,8 @@ async fn inner_main(state: AppState) -> Result<()> {
         .route("/browse/*path", get(serve_path_view))
         .route("/dl/*path", get(dl_path))
         .with_state(state);
-    let addr: SocketAddr = "0.0.0.0:3779".parse().expect("This is a valid address");
+
+    let addr = SocketAddr::from(([0,0,0,0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("Server listening on {addr}");
     axum::serve(listener, app).await?;
