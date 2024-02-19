@@ -88,6 +88,7 @@ pub fn content_type_from_extension(ext: Option<&str>) -> &str {
     }
 }
 
+// https://stackoverflow.com/a/63871901
 pub fn cmp_ignore_case_utf8(a: &str, b: &str) -> Ordering {
     a.chars()
         .flat_map(char::to_lowercase)
