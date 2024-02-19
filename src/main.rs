@@ -71,17 +71,27 @@ impl AppState {
         let data_dir = env::var(DATA_DIR_VAR).unwrap_or_else(|_| "./data".into());
         let data_dir = Utf8PathBuf::from(&data_dir).into();
 
+        let port = env::var(PORT_VAR)
+            .unwrap_or_else(|_| "3779".into())
+            .parse()
+            .wrap_err("Port was invalid")?;
+
         Ok(Self {
             _admin_username: admin_username,
             _admin_password: admin_password,
             base_url,
             data_dir,
+            port,
             cache: Arc::default(),
         })
     }
 }
 
-fn refresh_cache(cache: &RwLock<Vec<CacheEntry>>, data_dir: &Utf8Path) -> Result<()> {
+fn refresh_cache(
+    cache: &RwLock<Vec<CacheEntry>>,
+    data_dir: &Utf8Path,
+    is_first: bool,
+) -> Result<()> {
     let entries = data_dir
         .read_dir()
         .wrap_err_with(|| format!("Failed to read contents of data dir {data_dir}"))?;
@@ -92,7 +102,11 @@ fn refresh_cache(cache: &RwLock<Vec<CacheEntry>>, data_dir: &Utf8Path) -> Result
         let mut lock = cache.write();
         *lock = entries;
     }
-    info!("Updated data dir cache after event");
+    if is_first {
+        info!("Generated directory cache");
+    } else {
+        info!("Updated directory cache after fs event");
+    }
 
     Ok(())
 }
@@ -101,7 +115,7 @@ async fn inner_main(state: AppState) -> Result<()> {
     let data_dir = Arc::clone(&state.data_dir);
     let cache = Arc::clone(&state.cache);
 
-    refresh_cache(&cache, &data_dir).expect("Failed refreshing cache");
+    refresh_cache(&cache, &data_dir, true).expect("Failed refreshing cache");
     tokio::task::spawn_blocking(move || {
         let data_dir_watch = Arc::clone(&data_dir);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -116,7 +130,7 @@ async fn inner_main(state: AppState) -> Result<()> {
 
         for res in rx {
             match res {
-                Ok(_) => refresh_cache(&cache, &data_dir).expect("Failed refreshing cache"),
+                Ok(_) => refresh_cache(&cache, &data_dir, false).expect("Failed refreshing cache"),
                 Err(e) => error!("Got error {e:?} when watching data dir"),
             }
         }
