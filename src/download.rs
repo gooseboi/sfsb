@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::{self, State},
+    extract::{self, Query, State},
     http::{HeaderMap, Response, StatusCode},
 };
 use camino::{Utf8Path, Utf8PathBuf};
@@ -8,9 +8,10 @@ use color_eyre::{
     eyre::{ensure, ContextCompat, WrapErr},
     Result,
 };
-use std::{io::SeekFrom, path::PathBuf};
+use std::{collections::HashMap, io::SeekFrom, path::PathBuf};
 use tokio::io::{AsyncSeekExt as _, BufReader};
 use tracing::{debug, info};
+use itertools::Itertools as _;
 
 type Ranges = Vec<(Option<u64>, Option<u64>)>;
 
@@ -86,7 +87,7 @@ pub async fn dl_range(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
-pub async fn dl_path(
+pub async fn dl_path_single(
     extract::Path(fetched_path): extract::Path<PathBuf>,
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -156,6 +157,38 @@ pub async fn dl_path(
             .body(stream)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
     }
+}
+
+pub async fn dl_path_multiple(
+    extract::Path(fetched_path): extract::Path<PathBuf>,
+    State(state): State<AppState>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let paths = query.into_keys().sorted().map(Utf8PathBuf::from).collect::<Vec<_>>();
+    let fetched_path = Utf8PathBuf::from_path_buf(fetched_path).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "Path provided was not UTF-8".to_string(),
+        )
+    })?;
+    serve_dl_path_multiple(&fetched_path, &paths, state).await
+}
+
+pub async fn dl_path_multiple_root(
+    State(state): State<AppState>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let paths = query.into_keys().sorted().map(Utf8PathBuf::from).collect::<Vec<_>>();
+    serve_dl_path_multiple(Utf8Path::new("."), &paths, state).await
+}
+
+pub async fn serve_dl_path_multiple(
+    path: &Utf8Path,
+    paths: &[Utf8PathBuf],
+    state: AppState,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    debug!(?paths);
+    todo!()
 }
 
 pub fn parse_ranges(range: &str) -> Result<Ranges> {

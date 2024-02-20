@@ -28,7 +28,7 @@ mod dir_cache;
 use dir_cache::CacheEntry;
 
 mod download;
-use download::dl_path;
+use download::{dl_path_multiple, dl_path_multiple_root, dl_path_single};
 
 #[derive(Clone)]
 struct AppState {
@@ -142,10 +142,12 @@ async fn inner_main(state: AppState) -> Result<()> {
         .route("/browse", get(root_directory_view))
         .route("/browse/", get(root_directory_view))
         .route("/browse/*path", get(serve_path_view))
-        .route("/dl/*path", get(dl_path))
+        .route("/dl/single/*path", get(dl_path_single))
+        .route("/dl/multiple/", get(dl_path_multiple_root))
+        .route("/dl/multiple/*path", get(dl_path_multiple))
         .with_state(state);
 
-    let addr = SocketAddr::from(([0,0,0,0], port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("Server listening on {addr}");
     axum::serve(listener, app).await?;
