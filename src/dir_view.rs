@@ -99,20 +99,23 @@ pub fn normalise_path(path: &Utf8Path) -> Result<Utf8PathBuf> {
         return Ok(Utf8PathBuf::new());
     }
 
-    let components = path.components().collect::<Vec<_>>();
     ensure!(
-        components.iter().all(|c| *c != Utf8Component::ParentDir),
+        path.components().all(|c| c != Utf8Component::ParentDir),
         "Path cannot have `..`, nice try... (Got path {path:?})"
     );
 
-    if components[0] == Utf8Component::CurDir {
-        Ok(components[1..].iter().collect())
+    let mut components = path.components();
+    if matches!(components.next(), Some(Utf8Component::CurDir)) {
+        Ok(components.collect())
     } else {
         Ok(path.to_path_buf())
     }
 }
 
-pub fn get_path_from_cache(path: &Utf8Path, v: &[CacheEntry]) -> Result<Option<Vec<CacheEntry>>> {
+pub fn path_contents_from_cache(
+    path: &Utf8Path,
+    v: &[CacheEntry],
+) -> Result<Option<Vec<CacheEntry>>> {
     if path == Utf8Path::new("") {
         return Ok(Some(v.to_vec()));
     }
@@ -130,7 +133,7 @@ pub fn get_path_from_cache(path: &Utf8Path, v: &[CacheEntry]) -> Result<Option<V
         return Ok(None);
     };
 
-    return get_path_from_cache(components.as_path(), &c.as_dir().children);
+    return path_contents_from_cache(components.as_path(), &c.as_dir().children);
 }
 
 impl DirectoryViewTemplate {
@@ -316,7 +319,22 @@ pub fn view_for_path(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let lock = cache.read();
-    let path_entries = get_path_from_cache(&normalised_path, &lock)
+    let max_depth = lock
+        .iter()
+        .filter(|c| c.is_dir())
+        .map(|d| d.as_dir().max_depth())
+        .max()
+        .unwrap_or(0);
+    if path_for_view.components().count() > max_depth {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Path had more components than maximum depth of data".to_string(),
+        ));
+    }
+    drop(lock);
+
+    let lock = cache.read();
+    let path_entries = path_contents_from_cache(&normalised_path, &lock)
         .wrap_err_with(|| format!("Failed fetching contents of path {normalised_path:?}"))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     drop(lock);

@@ -103,6 +103,22 @@ impl DirEntry {
     pub fn children_count(&self) -> usize {
         self.children.len()
     }
+
+    pub fn max_depth(&self) -> usize {
+        self.children
+            .iter()
+            .filter_map(|c| {
+                if let CacheEntry::Dir(d) = c {
+                    Some(d)
+                } else {
+                    None
+                }
+            })
+            .map(Self::max_depth)
+            .max()
+            .map(|d| d + 1)
+            .unwrap_or(0)
+    }
 }
 
 /// Struct that represents a file/directory inside a directory, that can
