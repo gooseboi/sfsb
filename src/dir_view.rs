@@ -89,7 +89,7 @@ pub struct DirectoryViewTemplate {
     sort_key: SortKey,
 }
 
-pub fn validate_path_and_make_relative(path: &Utf8Path) -> Result<Utf8PathBuf> {
+pub fn normalise_path(path: &Utf8Path) -> Result<Utf8PathBuf> {
     ensure!(
         path.is_relative(),
         "Path fetched must be relative, got absolute path {path:?}"
@@ -99,18 +99,17 @@ pub fn validate_path_and_make_relative(path: &Utf8Path) -> Result<Utf8PathBuf> {
         return Ok(Utf8PathBuf::new());
     }
 
-    let components = path.components();
+    let components = path.components().collect::<Vec<_>>();
     ensure!(
-        components.clone().all(|c| c != Utf8Component::ParentDir),
+        components.iter().all(|c| *c != Utf8Component::ParentDir),
         "Path cannot have `..`, nice try... (Got path {path:?})"
     );
 
-    let components_vec = components.collect::<Vec<_>>();
-    if components_vec[0] == Utf8Component::CurDir {
-        return Ok(components_vec[1..].iter().collect());
+    if components[0] == Utf8Component::CurDir {
+        Ok(components[1..].iter().collect())
+    } else {
+        Ok(path.to_path_buf())
     }
-
-    Ok(path.to_path_buf())
 }
 
 pub fn get_path_from_cache(path: &Utf8Path, v: &[CacheEntry]) -> Result<Option<Vec<CacheEntry>>> {
@@ -312,19 +311,19 @@ pub fn view_for_path(
 
     debug!(fetch_query = ?query);
 
-    let validated_path_for_view = validate_path_and_make_relative(path_for_view)
+    let normalised_path = normalise_path(path_for_view)
         .wrap_err_with(|| format!("Failed making path {path_for_view:?} goody"))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let lock = cache.read();
-    let path_entries = get_path_from_cache(&validated_path_for_view, &lock)
-        .wrap_err_with(|| format!("Failed fetching contents of path {validated_path_for_view:?}"))
+    let path_entries = get_path_from_cache(&normalised_path, &lock)
+        .wrap_err_with(|| format!("Failed fetching contents of path {normalised_path:?}"))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     drop(lock);
 
     // If we have no dir entries, user tried to browse a file
     let Some(dir_entries) = path_entries else {
-        return Ok(Redirect::permanent(&format!("/dl/{validated_path_for_view}")).into_response());
+        return Ok(Redirect::permanent(&format!("/dl/{normalised_path}")).into_response());
     };
 
     if query.aria2() {
@@ -335,9 +334,6 @@ pub fn view_for_path(
             .body(Body::new(generate_aria2(base_url, &dir_entries)))
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
     } else {
-        Ok(
-            DirectoryViewTemplate::new(&validated_path_for_view, dir_entries, query)
-                .into_response(),
-        )
+        Ok(DirectoryViewTemplate::new(&normalised_path, dir_entries, query).into_response())
     }
 }
