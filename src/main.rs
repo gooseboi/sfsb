@@ -117,7 +117,7 @@ async fn inner_main(state: AppState) -> Result<()> {
 
     refresh_cache(&cache, &data_dir, true).expect("Failed refreshing cache");
     tokio::task::spawn_blocking(move || {
-        let data_dir_watch = Arc::clone(&data_dir);
+        let data_dir = Arc::clone(&data_dir);
         let (tx, rx) = std::sync::mpsc::channel();
 
         let mut watcher = notify_debouncer_full::new_debouncer(Duration::from_secs(1), None, tx)
@@ -125,12 +125,14 @@ async fn inner_main(state: AppState) -> Result<()> {
 
         watcher
             .watcher()
-            .watch(data_dir_watch.as_std_path(), RecursiveMode::Recursive)
+            .watch(data_dir.as_std_path(), RecursiveMode::Recursive)
             .expect("Failed watching data dir");
 
         for res in rx {
             match res {
-                Ok(_) => refresh_cache(&cache, &data_dir, false).expect("Failed refreshing cache"),
+                Ok(_) => {
+                    refresh_cache(&cache, &data_dir, false).expect("Failed refreshing cache");
+                }
                 Err(e) => error!("Got error {e:?} when watching data dir"),
             }
         }
@@ -145,7 +147,7 @@ async fn inner_main(state: AppState) -> Result<()> {
         .route("/dl/*path", get(dl_path))
         .with_state(state);
 
-    let addr = SocketAddr::from(([0,0,0,0], port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("Server listening on {addr}");
     axum::serve(listener, app).await?;

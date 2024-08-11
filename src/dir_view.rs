@@ -72,7 +72,7 @@ impl Default for SortKey {
 #[template(path = "dir_view.html")]
 pub struct DirectoryViewTemplate {
     /// String pointing to parent directory of current directory, used to traverse up
-    parent: Option<String>,
+    parent_directory: Option<String>,
     /// List of dirnames with anchor tags used to browse up in the view
     /// For directory "Some dir/dir1"
     /// "<a href="/browse/Some%20dir">Some dir</a> / <a href="/browse/Some%20dir/dir1">dir1</a>"
@@ -136,19 +136,17 @@ pub fn get_path_from_cache(path: &Utf8Path, v: &[CacheEntry]) -> Result<Option<V
 
 impl DirectoryViewTemplate {
     pub fn new(data_dir: &Utf8Path, mut entries: Vec<CacheEntry>, query: FetchQuery) -> Self {
-        let parent = if data_dir == Utf8Path::new(".") {
+        let parent_directory = if data_dir == Utf8Path::new(".") {
             None
         } else {
             data_dir.parent().map(std::string::ToString::to_string)
         };
 
-        let dirname = {
-            let mut dirname = data_dir.as_os_str().to_string_lossy().as_ref().to_owned();
-            if !dirname.is_empty() && !dirname.ends_with('/') {
-                dirname.push('/');
-            }
-            dirname
-        };
+        let mut dirname = data_dir.as_os_str().to_string_lossy().as_ref().to_owned();
+        if !dirname.is_empty() && !dirname.ends_with('/') {
+            dirname.push('/');
+        }
+        let dirname = dirname;
 
         let encoded_dirname = urlencode(&dirname).expect("TODO: Handle dirnames not urlencodable");
 
@@ -208,8 +206,9 @@ impl DirectoryViewTemplate {
                 ord
             }
         });
+
         Self {
-            parent,
+            parent_directory,
             list_of_anchors,
             // FIXME: Display the directory properly in the title
             display_dirname: dirname,

@@ -45,7 +45,7 @@
 	</head>
 <body>
 <div>
-	{% if parent.is_some() %}<a href="/browse/{{parent.as_ref().unwrap()}}">[..]</a>{% endif %}
+	{% if let Some(parent) = parent_directory %}<a href="/browse/{{parent}}">[..]</a>{% endif %}
 	<a href="/browse/">[Root]</a> / {{ list_of_anchors|escape("none") }}
 </div>
 <div>
