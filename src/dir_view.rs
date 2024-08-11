@@ -325,7 +325,8 @@ pub fn view_for_path(
         .map(|d| d.as_dir().max_depth())
         .max()
         .unwrap_or(0);
-    if path_for_view.components().count() > max_depth {
+    // Allow displaying the dir view for an empty directory, as empty
+    if path_for_view.components().count() > max_depth + 1 {
         return Err((
             StatusCode::BAD_REQUEST,
             "Path had more components than maximum depth of data".to_string(),

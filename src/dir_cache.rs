@@ -116,8 +116,7 @@ impl DirEntry {
             })
             .map(Self::max_depth)
             .max()
-            .map(|d| d + 1)
-            .unwrap_or(0)
+            .map_or(0, |d| d + 1)
     }
 }
 
