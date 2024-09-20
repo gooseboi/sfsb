@@ -17,15 +17,15 @@
 				font-size: 100%;
 			}
 
-			td:nth-child(2) {
+			td:nth-child(3) {
 				text-align: center;
 			}
 
-			td:nth-child(3) {
+			td:nth-child(4) {
 				text-align: right;
 			}
 
-			td:nth-child(4) {
+			td:nth-child(5) {
 				text-align: right;
 			}
 
@@ -49,8 +49,10 @@
 	<a href="/browse/">[Root]</a> / {{ list_of_anchors|escape("none") }}
 </div>
 <div>
+	<form action="/arc/{{encoded_dirname}}" method="GET">
 	<table>
 		<tr>
+			<th>Select</tH>
 			{% if sort_key == SortKey::Name && sort_direction == SortDirection::Ascending %}
 				<th><a href="/browse/{{encoded_dirname}}?sort=name&ord=desc">Name</a></th>
 			{% else %}
@@ -74,10 +76,15 @@
 		</tr>
 		{% for entry in entries %}
 		<tr>
+			<td><input type="checkbox" id="batch-{{entry.name_url_encoded()}}-checkbox" name="files" value="{{entry.name_url_encoded()}}"></td>
 			{% if entry.is_dir() %}
-				<td><a href="/browse/{{encoded_dirname}}{{entry.name_url_encoded()}}/"><strong>{{ entry.name() }}</strong></a></td>
+				<td>
+					<label for="batch-{{entry.name_url_encoded()}}-checkbox"><a href="/browse/{{encoded_dirname}}{{entry.name_url_encoded()}}/"><strong>{{ entry.name() }}</strong></a></label>
+				</td>
 			{% else %}
-				<td><a href="/dl/{{encoded_dirname}}{{entry.name_url_encoded()}}">{{ entry.as_file().name }}</a></td>
+				<td>
+					<label for="batch-{{entry.name_url_encoded()}}-checkbox"><a href="/dl/{{encoded_dirname}}{{entry.name_url_encoded()}}">{{ entry.as_file().name }}</a></label>
+				</td>
 			{% endif %}
 			<td>{{ entry.created() }}</td>
 			<td>{{ entry.size_str() }}</td>
@@ -90,6 +97,9 @@
 		</tr>
 		{% endfor %}
 	</table>
+	<br/>
+	<input type="submit" value="Submit">
+	</form>
 </div>
 </body>
 </html>

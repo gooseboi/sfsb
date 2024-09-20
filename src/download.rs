@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::{self, State},
+    extract::{self, Query, State},
     http::{HeaderMap, Response, StatusCode},
 };
 use camino::{Utf8Path, Utf8PathBuf};
@@ -8,7 +8,7 @@ use color_eyre::{
     eyre::{ensure, ContextCompat, WrapErr},
     Result,
 };
-use std::{io::SeekFrom, path::PathBuf};
+use std::{collections::HashMap, io::SeekFrom, path::PathBuf};
 use tokio::io::{AsyncSeekExt as _, BufReader};
 use tracing::{debug, info};
 
@@ -205,4 +205,14 @@ pub fn parse_ranges(range: &str) -> Result<Ranges> {
         res.push((v1, v2));
     }
     Ok(res)
+}
+
+pub async fn dl_archive(
+    extract::Path(fetched_path): extract::Path<PathBuf>,
+    State(_): State<AppState>,
+    _: HeaderMap,
+    Query(query): Query<HashMap<String, Option<Vec<String>>>>,
+) -> Result<Response<Body>, String> {
+    info!(?fetched_path, ?query, "Downloading archive from path");
+    todo!()
 }

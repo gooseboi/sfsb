@@ -28,7 +28,7 @@ mod dir_cache;
 use dir_cache::CacheEntry;
 
 mod download;
-use download::dl_path;
+use download::{dl_archive, dl_path};
 
 #[derive(Clone)]
 struct AppState {
@@ -145,6 +145,7 @@ async fn inner_main(state: AppState) -> Result<()> {
         .route("/browse/", get(root_directory_view))
         .route("/browse/*path", get(serve_path_view))
         .route("/dl/*path", get(dl_path))
+        .route("/arc/*path", get(dl_archive))
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
