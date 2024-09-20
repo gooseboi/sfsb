@@ -18,15 +18,15 @@
 				font-size: 100%;
 			}
 
-			td:nth-child(3) {
+			td.creation-time-column {
 				text-align: center;
 			}
 
-			td:nth-child(4) {
+			td.size-column {
 				text-align: right;
 			}
 
-			td:nth-child(5) {
+			td.children-count-column {
 				text-align: right;
 			}
 
@@ -53,47 +53,56 @@
 	<form action="/arc/{{encoded_dirname}}" method="GET">
 	<table>
 		<tr>
-			<th>Select</tH>
+			<th class="select-column"></th>
 			{% if sort_key == SortKey::Name && sort_direction == SortDirection::Ascending %}
-				<th><a href="/browse/{{encoded_dirname}}?sort=name&ord=desc">Name</a></th>
+				<th><a class="name-column" href="/browse/{{encoded_dirname}}?sort=name&ord=desc">Name</a></th>
 			{% else %}
-				<th><a href="/browse/{{encoded_dirname}}?sort=name&ord=asc">Name</a></th>
+				<th><a class="name-column" href="/browse/{{encoded_dirname}}?sort=name&ord=asc">Name</a></th>
 			{% endif %}
 			{% if sort_key == SortKey::Date && sort_direction == SortDirection::Ascending %}
-				<th><a href="/browse/{{encoded_dirname}}?sort=date&ord=desc">Creation Time</a></th>
+				<th><a class="creation-time-column" href="/browse/{{encoded_dirname}}?sort=date&ord=desc">Creation Time</a></th>
 			{% else %}
-				<th><a href="/browse/{{encoded_dirname}}?sort=date&ord=asc">Creation Time</a></th>
+				<th><a class="creation-time-column" href="/browse/{{encoded_dirname}}?sort=date&ord=asc">Creation Time</a></th>
 			{% endif %}
 			{% if sort_key == SortKey::Size && sort_direction == SortDirection::Ascending %}
-				<th><a href="/browse/{{encoded_dirname}}?sort=size&ord=desc">Size</a></th>
+				<th><a class="size-column" href="/browse/{{encoded_dirname}}?sort=size&ord=desc">Size</a></th>
 			{% else %}
-				<th><a href="/browse/{{encoded_dirname}}?sort=size&ord=asc">Size</a></th>
+				<th><a class="size-column" href="/browse/{{encoded_dirname}}?sort=size&ord=asc">Size</a></th>
 			{% endif %}
 			{% if sort_key == SortKey::Size && sort_direction == SortDirection::Ascending %}
-				<th><a href="/browse/{{encoded_dirname}}?sort=children_count&ord=desc">Children Count</a></th>
+				<th><a class="children-count-column" href="/browse/{{encoded_dirname}}?sort=children_count&ord=desc">Children Count</a></th>
 			{% else %}
-				<th><a href="/browse/{{encoded_dirname}}?sort=children_count&ord=asc">Children Count</a></th>
+				<th><a class="children-count-column" href="/browse/{{encoded_dirname}}?sort=children_count&ord=asc">Children Count</a></th>
 			{% endif %}
 		</tr>
 		{% for entry in entries %}
-		<tr>
-			<td><input type="checkbox" id="batch-{{entry.name_url_encoded()}}-checkbox" name="files" value="{{entry.name_url_encoded()}}"></td>
+		<tr id="{{entry.name_url_encoded()}}-row">
+			<td class="select-column">
+				<input type="checkbox"
+				       id="batch-{{entry.name_url_encoded()}}-checkbox"
+					   name="files"
+					   value="{{entry.name_url_encoded()}}">
+			</td>
 			{% if entry.is_dir() %}
-				<td>
-					<label for="batch-{{entry.name_url_encoded()}}-checkbox"><a href="/browse/{{encoded_dirname}}{{entry.name_url_encoded()}}/"><strong>{{ entry.name() }}</strong></a></label>
+				<td class="name-column">
+					<label for="batch-{{entry.name_url_encoded()}}-checkbox">
+						<a href="/browse/{{encoded_dirname}}{{entry.name_url_encoded()}}/"><strong>{{ entry.name() }}</strong></a>
+					</label>
 				</td>
 			{% else %}
-				<td>
-					<label for="batch-{{entry.name_url_encoded()}}-checkbox"><a href="/dl/{{encoded_dirname}}{{entry.name_url_encoded()}}">{{ entry.as_file().name }}</a></label>
+				<td class="name-column">
+					<label for="batch-{{entry.name_url_encoded()}}-checkbox">
+						<a href="/dl/{{encoded_dirname}}{{entry.name_url_encoded()}}">{{ entry.as_file().name }}</a>
+					</label>
 				</td>
 			{% endif %}
-			<td>{{ entry.created() }}</td>
-			<td>{{ entry.size_str() }}</td>
+			<td class="creation-time-column">{{ entry.created() }}</td>
+			<td class="size-column">{{ entry.size_str() }}</td>
 			{% if entry.is_dir() %}
 				{% let entry = entry.as_dir() %}
-				<td>{{ entry.children_count() }}</td>
+				<td class="children-count-column">{{ entry.children_count() }}</td>
 			{% else %}
-				<td>-</td>
+				<td class="children-count-column">-</td>
 			{% endif %}
 		</tr>
 		{% endfor %}

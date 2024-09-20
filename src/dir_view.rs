@@ -353,6 +353,7 @@ pub fn view_for_path(
             .body(Body::new(generate_aria2(base_url, &dir_entries)))
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
     } else {
+        // TODO: Minify this
         Ok(DirectoryViewTemplate::new(&normalised_path, dir_entries, query).into_response())
     }
 }
