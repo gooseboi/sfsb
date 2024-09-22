@@ -134,7 +134,10 @@ async fn inner_main(state: AppState) -> Result<()> {
 
         loop {
             match task_cancel_rx.try_recv() {
-                Ok(()) => return,
+                Ok(()) => {
+                    warn!("Finished aborting data refresh task");
+                    return;
+                }
                 Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
                 Err(e) => error!("Got error {e:?} when waiting to cancel watching data dir"),
             }
@@ -168,7 +171,7 @@ async fn inner_main(state: AppState) -> Result<()> {
             .send(())
             .await
             .expect("Failed sending data watch cancellation message");
-        warn!("Finished aborting data refresh task");
+        warn!("Starting abort for data refresh task");
     };
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
