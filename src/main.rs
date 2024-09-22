@@ -164,8 +164,33 @@ async fn inner_main(state: AppState) -> Result<()> {
         .route("/arc/*path", get(dl_archive))
         .with_state(state);
 
+    // Tokio doesn't follow this for some reason
+    #[allow(clippy::redundant_pub_crate)]
     let quit_sig = async move {
-        _ = tokio::signal::ctrl_c().await;
+        #[cfg(target_family = "unix")]
+        let wait_for_stop = async move {
+            use tokio::signal::unix;
+
+            let mut term = unix::signal(unix::SignalKind::terminate())
+                .expect("listening for signal shouldn't fail");
+            let mut int = unix::signal(unix::SignalKind::interrupt())
+                .expect("listening for signal shouldn't fail");
+
+            tokio::select! {
+                _ = int.recv() => { warn!("Received SIGINT, stopping") },
+                _ = term.recv() => { warn!("Received SIGTERM, stopping") },
+            };
+        };
+
+        #[cfg(target_family = "windows")]
+        let wait_for_stop = async move {
+            _ = tokio::signal::ctrl_c()
+                .await
+                .expect("listening for stop shouldn't fail");
+        };
+
+        wait_for_stop.await;
+
         warn!("Initiating graceful shutdown...");
         task_cancel_tx
             .send(())
