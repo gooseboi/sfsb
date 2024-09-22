@@ -15,7 +15,7 @@ use color_eyre::{
 use notify::{RecursiveMode, Watcher as _};
 use parking_lot::RwLock;
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
@@ -148,10 +148,17 @@ async fn inner_main(state: AppState) -> Result<()> {
         .route("/arc/*path", get(dl_archive))
         .with_state(state);
 
+    let quit_sig = async {
+        _ = tokio::signal::ctrl_c().await;
+        warn!("Initiating graceful shutdown...");
+    };
+
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("Server listening on {addr}");
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(quit_sig)
+        .await?;
 
     Ok(())
 }
