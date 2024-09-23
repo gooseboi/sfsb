@@ -22,3 +22,6 @@ tokio-util = { version = "0.7.10", features = ["io", "tracing"] }
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 url = "2.5.0"
+
+[build-dependencies]
+html-minifier = "5.0.0"
