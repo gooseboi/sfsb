@@ -95,18 +95,29 @@ fn refresh_cache(
     Ok(())
 }
 
+enum DataUpdateEvent {
+    FsNotify(notify_debouncer_full::DebounceEventResult),
+    Shutdown,
+}
+
 async fn inner_main(state: AppState) -> Result<()> {
     let data_dir = Arc::clone(&state.data_dir);
     let cache = Arc::clone(&state.cache);
 
-    let (task_cancel_tx, mut task_cancel_rx) = tokio::sync::oneshot::channel::<()>();
+    let (data_update_tx, mut data_update_rx) = tokio::sync::mpsc::channel(2);
 
     refresh_cache(&cache, &data_dir, true).expect("Failed refreshing cache");
+    let task_tx = data_update_tx.clone();
     tokio::task::spawn_blocking(move || {
         let data_dir = Arc::clone(&data_dir);
-        let (tx, rx) = std::sync::mpsc::channel();
 
-        let mut watcher = notify_debouncer_full::new_debouncer(Duration::from_secs(1), None, tx)
+        let mut watcher =
+            notify_debouncer_full::new_debouncer(Duration::from_secs(1), None, move |ev| {
+                match task_tx.blocking_send(DataUpdateEvent::FsNotify(ev)) {
+                    Ok(()) => {}
+                    Err(e) => error!("Failed sending DataUpdateEvent after notify event: {e}"),
+                }
+            })
             .expect("Failed creating watcher for data dir");
 
         watcher
@@ -115,24 +126,20 @@ async fn inner_main(state: AppState) -> Result<()> {
             .expect("Failed watching data dir");
 
         loop {
-            match task_cancel_rx.try_recv() {
-                Ok(()) => {
-                    warn!("Finished aborting data refresh task");
-                    return;
-                }
-                Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
-                Err(e) => error!("Got error {e:?} when waiting to cancel watching data dir"),
-            }
-            match rx.try_recv() {
-                Ok(_) => {
+            match data_update_rx.blocking_recv() {
+                Some(DataUpdateEvent::FsNotify(_)) => {
+                    info!("Refreshing data directory cache after event");
                     refresh_cache(&cache, &data_dir, false).expect("Failed refreshing cache");
                 }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                Err(e) => error!("Got error {e:?} when watching data dir"),
+                Some(DataUpdateEvent::Shutdown) => {
+                    warn!("Aborting data refresh task");
+                    break;
+                }
+                None => {
+                    error!("All data update senders have been dropped, quitting anyway");
+                    break;
+                }
             }
-            // Idk, something long enough
-            // FIXME: Make this editable?
-            std::thread::sleep(Duration::from_millis(100));
         }
     });
 
@@ -173,9 +180,13 @@ async fn inner_main(state: AppState) -> Result<()> {
 
         wait_for_stop.await;
 
+        // If the above task finishes, then that means we received a termination/interrupt signal,
+        // and should quit
         warn!("Initiating graceful shutdown...");
-        task_cancel_tx
-            .send(())
+
+        data_update_tx
+            .send(DataUpdateEvent::Shutdown)
+            .await
             .expect("Failed sending data watch cancellation message");
         warn!("Starting abort for data refresh task");
     };
