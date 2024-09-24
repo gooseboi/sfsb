@@ -99,9 +99,7 @@ async fn inner_main(state: AppState) -> Result<()> {
     let data_dir = Arc::clone(&state.data_dir);
     let cache = Arc::clone(&state.cache);
 
-    // Add one more, as a treat
-    // This should always only have one message, the cancel message, but whatever
-    let (task_cancel_tx, mut task_cancel_rx) = tokio::sync::mpsc::channel::<()>(2);
+    let (task_cancel_tx, mut task_cancel_rx) = tokio::sync::oneshot::channel::<()>();
 
     refresh_cache(&cache, &data_dir, true).expect("Failed refreshing cache");
     tokio::task::spawn_blocking(move || {
@@ -122,7 +120,7 @@ async fn inner_main(state: AppState) -> Result<()> {
                     warn!("Finished aborting data refresh task");
                     return;
                 }
-                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
+                Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
                 Err(e) => error!("Got error {e:?} when waiting to cancel watching data dir"),
             }
             match rx.try_recv() {
@@ -178,7 +176,6 @@ async fn inner_main(state: AppState) -> Result<()> {
         warn!("Initiating graceful shutdown...");
         task_cancel_tx
             .send(())
-            .await
             .expect("Failed sending data watch cancellation message");
         warn!("Starting abort for data refresh task");
     };
