@@ -32,9 +32,6 @@ use download::{dl_archive, dl_path};
 
 #[derive(Clone)]
 struct AppState {
-    // TODO: Use these
-    _admin_username: Arc<str>,
-    _admin_password: Arc<str>,
     base_url: Arc<Url>,
     data_dir: Arc<Utf8Path>,
     port: u16,
@@ -43,20 +40,9 @@ struct AppState {
 
 impl AppState {
     fn new() -> Result<Self> {
-        const ADMIN_USERNAME_VAR: &str = "SFSB_ADMIN_USERNAME";
-        const ADMIN_PASSWORD_VAR: &str = "SFSB_ADMIN_PASSWORD";
         const BASE_URL_VAR: &str = "SFSB_BASE_URL";
         const DATA_DIR_VAR: &str = "SFSB_DATA_DIR";
         const PORT_VAR: &str = "SFSB_PORT";
-
-        let admin_username = env::var(ADMIN_USERNAME_VAR)
-            .wrap_err_with(|| format!("Could not get environment variable {ADMIN_USERNAME_VAR}"))?
-            .into();
-
-        // FIXME: Hash this?
-        let admin_password = env::var(ADMIN_PASSWORD_VAR)
-            .wrap_err_with(|| format!("Could not get environment variable {ADMIN_PASSWORD_VAR}"))?
-            .into();
 
         let base_url = env::var(BASE_URL_VAR)
             .wrap_err_with(|| format!("Could not get environment variable {BASE_URL_VAR}"))?;
@@ -77,8 +63,6 @@ impl AppState {
             .wrap_err("Port was invalid")?;
 
         Ok(Self {
-            _admin_username: admin_username,
-            _admin_password: admin_password,
             base_url,
             data_dir,
             port,
