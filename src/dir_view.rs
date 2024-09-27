@@ -68,6 +68,7 @@ impl Default for SortKey {
     }
 }
 
+// FIXME: Minify this!
 #[derive(Template)]
 #[template(path = "dir_view.html")]
 pub struct DirectoryViewTemplate {
