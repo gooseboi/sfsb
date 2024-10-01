@@ -26,22 +26,20 @@ pub struct AppState {
     pub cache: Arc<RwLock<Vec<CacheEntry>>>,
 }
 
-fn refresh_cache(
-    cache: &RwLock<Vec<CacheEntry>>,
-    data_dir: &Utf8Path,
-    is_first: bool,
-) -> Result<()> {
+fn refresh_cache(cache: &RwLock<Vec<CacheEntry>>, data_dir: &Utf8Path) -> Result<()> {
     let entries = data_dir
         .read_dir()
         .wrap_err_with(|| format!("Failed to read contents of data dir {data_dir}"))?;
     let entries: Result<Vec<CacheEntry>> = entries.map(|e| e?.try_into()).collect();
     let entries =
         entries.wrap_err_with(|| format!("Failed to parse contents of data dir {data_dir}"))?;
-    {
+    let empty = {
         let mut lock = cache.write();
+        let empty = lock.is_empty();
         *lock = entries;
-    }
-    if is_first {
+        empty
+    };
+    if empty {
         info!("Generated directory cache");
     } else {
         info!("Updated directory cache after fs event");
@@ -61,7 +59,7 @@ pub async fn run_app(state: AppState) -> Result<()> {
 
     let (data_update_tx, mut data_update_rx) = tokio::sync::mpsc::channel(2);
 
-    refresh_cache(&cache, &data_dir, true).expect("Failed refreshing cache");
+    refresh_cache(&cache, &data_dir).expect("Failed refreshing cache");
     let task_tx = data_update_tx.clone();
     tokio::task::spawn_blocking(move || {
         let data_dir = Arc::clone(&data_dir);
@@ -84,7 +82,7 @@ pub async fn run_app(state: AppState) -> Result<()> {
             match data_update_rx.blocking_recv() {
                 Some(DataUpdateEvent::FsNotify(_)) => {
                     info!("Refreshing data directory cache after event");
-                    refresh_cache(&cache, &data_dir, false).expect("Failed refreshing cache");
+                    refresh_cache(&cache, &data_dir).expect("Failed refreshing cache");
                 }
                 Some(DataUpdateEvent::Shutdown) => {
                     warn!("Aborting data refresh task");
