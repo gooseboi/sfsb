@@ -14,3 +14,6 @@ run_release *ARGS: build_release
 
 check:
 	cargo clippy --all-targets --all-features
+
+test:
+	cargo test

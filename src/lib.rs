@@ -97,6 +97,7 @@ pub async fn run_app(config: AppConfig) -> Result<()> {
 
         loop {
             match data_update_rx.blocking_recv() {
+                // FIXME: Should this crash the program if the update fails?
                 Some(DataUpdateEvent::FsNotify(_)) => {
                     info!("Refreshing data directory cache after event");
                     refresh_cache(&cache, &data_dir).expect("Failed refreshing cache");
