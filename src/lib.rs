@@ -1,11 +1,11 @@
 #![feature(iter_intersperse)]
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use color_eyre::{eyre::Context as _, Result};
 use notify::{RecursiveMode, Watcher as _};
 use parking_lot::RwLock;
 use std::sync::Arc;
-use std::{net::SocketAddr, time::Duration};
+use std::time::Duration;
 use tracing::{error, info, warn};
 use url::Url;
 
@@ -18,12 +18,27 @@ use dir_cache::CacheEntry;
 use dir_view::{root_directory_view, serve_path_view};
 use download::{dl_archive, dl_path};
 
+pub struct AppConfig {
+    pub base_url: Url,
+    pub data_dir: Utf8PathBuf,
+    pub listener: tokio::net::TcpListener,
+}
+
 #[derive(Clone)]
-pub struct AppState {
-    pub base_url: Arc<Url>,
-    pub data_dir: Arc<Utf8Path>,
-    pub port: u16,
-    pub cache: Arc<RwLock<Vec<CacheEntry>>>,
+struct AppState {
+    base_url: Arc<Url>,
+    data_dir: Arc<Utf8Path>,
+    cache: Arc<RwLock<Vec<CacheEntry>>>,
+}
+
+impl AppState {
+    fn from_config(config: &AppConfig) -> Self {
+        Self {
+            base_url: config.base_url.clone().into(),
+            data_dir: config.data_dir.clone().into(),
+            cache: Arc::default(),
+        }
+    }
 }
 
 fn refresh_cache(cache: &RwLock<Vec<CacheEntry>>, data_dir: &Utf8Path) -> Result<()> {
@@ -53,7 +68,9 @@ enum DataUpdateEvent {
     Shutdown,
 }
 
-pub async fn run_app(state: AppState) -> Result<()> {
+pub async fn run_app(config: AppConfig) -> Result<()> {
+    let state = AppState::from_config(&config);
+
     let data_dir = Arc::clone(&state.data_dir);
     let cache = Arc::clone(&state.cache);
 
@@ -96,7 +113,6 @@ pub async fn run_app(state: AppState) -> Result<()> {
         }
     });
 
-    let port = state.port;
     let app = Router::new()
         .route("/", get(|| async { Redirect::permanent("/browse/") }))
         .route("/browse", get(root_directory_view))
@@ -144,10 +160,8 @@ pub async fn run_app(state: AppState) -> Result<()> {
         warn!("Starting abort for data refresh task");
     };
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    info!("Server listening on {addr}");
-    axum::serve(listener, app)
+    info!("Server listening on {}", config.listener.local_addr()?);
+    axum::serve(config.listener, app)
         .with_graceful_shutdown(quit_sig)
         .await?;
 

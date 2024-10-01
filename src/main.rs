@@ -8,19 +8,22 @@
 use camino::Utf8PathBuf;
 use clap::Parser;
 use color_eyre::Result;
-use std::sync::Arc;
+use std::net::{IpAddr, Ipv4Addr};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
-struct Config {
+struct RawConfig {
     #[arg(env = "SFSB_BASE_URL")]
     base_url: Url,
 
     #[arg(env = "SFSB_DATA_DIR")]
     data_dir: Utf8PathBuf,
+
+    #[arg(env = "SFSB_LISTEN_ADDRESS", default_value_t = IpAddr::V4(Ipv4Addr::new(0,0,0,0)))]
+    listen_address: IpAddr,
 
     #[arg(env = "SFSB_PORT", default_value_t = 3779)]
     port: u16,
@@ -29,19 +32,26 @@ struct Config {
     threads: usize,
 }
 
-impl From<Config> for sfsb::AppState {
-    fn from(config: Config) -> Self {
-        Self {
-            base_url: config.base_url.into(),
-            data_dir: config.data_dir.into(),
-            port: config.port,
-            cache: Arc::default(),
+impl RawConfig {
+    fn convert(self, listener: tokio::net::TcpListener) -> sfsb::AppConfig {
+        sfsb::AppConfig {
+            listener,
+            data_dir: self.data_dir,
+            base_url: self.base_url,
         }
     }
 }
 
+async fn startup(config: RawConfig) -> Result<()> {
+    let listener = tokio::net::TcpListener::bind((config.listen_address, config.port)).await?;
+
+    sfsb::run_app(config.convert(listener)).await?;
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
-    let config = Config::parse();
+    let config = RawConfig::parse();
 
     tracing_subscriber::registry()
         .with(
@@ -73,5 +83,5 @@ fn main() -> Result<()> {
     .expect("Failed building tokio runtime");
 
     info!(threads = config.threads, "Starting tokio runtime");
-    rt.block_on(sfsb::run_app(config.into()))
+    rt.block_on(startup(config))
 }
