@@ -38,6 +38,7 @@ impl RawConfig {
             listener,
             data_dir: self.data_dir,
             base_url: self.base_url,
+            shutdown: None,
         }
     }
 }

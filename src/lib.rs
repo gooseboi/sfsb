@@ -17,11 +17,13 @@ use axum::{response::Redirect, routing::get, Router};
 use dir_cache::CacheEntry;
 use dir_view::{root_directory_view, serve_path_view};
 use download::{dl_archive, dl_path};
+use tokio::sync::oneshot;
 
 pub struct AppConfig {
     pub base_url: Url,
     pub data_dir: Utf8PathBuf,
     pub listener: tokio::net::TcpListener,
+    pub shutdown: Option<oneshot::Receiver<()>>,
 }
 
 #[derive(Clone)]
@@ -100,7 +102,10 @@ pub async fn run_app(config: AppConfig) -> Result<()> {
                 // FIXME: Should this crash the program if the update fails?
                 Some(DataUpdateEvent::FsNotify(_)) => {
                     info!("Refreshing data directory cache after event");
-                    refresh_cache(&cache, &data_dir).expect("Failed refreshing cache");
+                    match refresh_cache(&cache, &data_dir) {
+                        Ok(_) => {}
+                        Err(e) => error!("Failed refreshing cache: {}", e),
+                    }
                 }
                 Some(DataUpdateEvent::Shutdown) => {
                     warn!("Aborting data refresh task");
@@ -148,7 +153,14 @@ pub async fn run_app(config: AppConfig) -> Result<()> {
                 .expect("listening for stop shouldn't fail");
         };
 
-        wait_for_stop.await;
+        if let Some(shutdown) = config.shutdown {
+            tokio::select! {
+                _ = wait_for_stop => { warn!("Received stop signal, shutting down") },
+                _ = shutdown => { warn!("Received manual shutdown signal, shutting down") },
+            }
+        } else {
+            wait_for_stop.await;
+        }
 
         // If the above task finishes, then that means we received a termination/interrupt signal,
         // and should quit
