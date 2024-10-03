@@ -1,7 +1,12 @@
 use camino::Utf8Path;
+use proptest::{prop_assume, proptest};
 use reqwest::StatusCode;
 use scraper::Html;
-use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    future::Future,
+    net::{IpAddr, Ipv4Addr},
+    path::{Path, PathBuf},
+};
 use tempfile::TempDir;
 use tokio::sync::oneshot;
 use url::Url;
@@ -20,22 +25,7 @@ impl Drop for SpawnInfo {
     }
 }
 
-fn start_tracing() {
-    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "sfsb=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-}
-
 async fn spawn_app_empty() -> SpawnInfo {
-    if std::env::var("SFSB_TEST_TRACING").is_ok() {
-        start_tracing();
-    }
-
     let dir = tempfile::tempdir().expect("could not create tempdir for data");
     let data_dir = Utf8Path::from_path(dir.path())
         .expect("temp path was not UTF-8")
@@ -63,12 +53,23 @@ async fn spawn_app_empty() -> SpawnInfo {
     }
 }
 
-// Every test of the app needs to be ran using the multi threaded runtime, because otherwise this
-// task has to yield to the scheduler for the scheduler to poll the shutdown task, on the event of
-// a shutdown, which would involve manually adding a sleep, which I think is jankier and more
-// cumbersome. Though the test can run on a single thread, so we just have a single worker thread.
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn empty_view_produces_valid_html() {
+// Every test of the app needs to be ran using the multi threaded runtime, because otherwise the
+// test task has to yield to the scheduler for the scheduler to poll the shutdown task, on the
+// event of a shutdown, which would involve manually adding a sleep, which I think is jankier and
+// more cumbersome than this workaround. However, the test can run on a single thread, so we just
+// have a single worker thread.
+fn start_test(func: impl Future<Output = ()>) {
+    {
+        return tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1usize)
+            .enable_all()
+            .build()
+            .expect("Failed building the Runtime")
+            .block_on(func);
+    }
+}
+
+async fn empty_view_produces_valid_html_impl() {
     let SpawnInfo {
         ref url,
         dir: ref _tempdir,
@@ -88,4 +89,39 @@ async fn empty_view_produces_valid_html() {
     // Force fully parsing the file
     let _ = parser.html();
     assert_eq!(parser.errors, Vec::<&str>::new());
+}
+
+#[test]
+fn empty_view_produces_valid_html() {
+    start_test(empty_view_produces_valid_html_impl());
+}
+
+async fn empty_dir_provides_no_views_impl(path: &Path) {
+    let SpawnInfo {
+        ref url,
+        dir: ref _tempdir,
+        shutdown: _,
+    } = spawn_app_empty().await;
+
+    let mut url = url.clone();
+    let mut segments = url.path_segments_mut().expect("url is not a base");
+    for segment in path {
+        let segment = segment.to_str().expect("segment was not UTF-8");
+        segments.push(segment);
+    }
+    drop(segments);
+    let res = reqwest::get(url.clone())
+        .await
+        .expect("no error with reqwest");
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+proptest! {
+    #[test]
+    fn empty_dir_view_only_works_on_root(path in "\\PC+") {
+        let path = PathBuf::from(path);
+        prop_assume!(path != PathBuf::from("."));
+
+        start_test(empty_dir_provides_no_views_impl(&path));
+    }
 }
